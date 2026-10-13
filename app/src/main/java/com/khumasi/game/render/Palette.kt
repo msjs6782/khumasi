@@ -23,9 +23,13 @@ object Palette {
     const val SEA_SHALLOW = 0x47C2C4
     const val FOAM = 0xF4FBFF
 
-    fun forState(state: LetterState): Int = when (state) {
-        LetterState.CORRECT -> CORRECT
-        LetterState.PRESENT -> PRESENT
+    // High-contrast pair for color-blind mode (orange / blue), shown together with symbols.
+    const val CB_CORRECT = 0xF5793A
+    const val CB_PRESENT = 0x3D8FD9
+
+    fun forState(state: LetterState, colorBlind: Boolean = false): Int = when (state) {
+        LetterState.CORRECT -> if (colorBlind) CB_CORRECT else CORRECT
+        LetterState.PRESENT -> if (colorBlind) CB_PRESENT else PRESENT
         LetterState.ABSENT -> ABSENT
         LetterState.UNKNOWN -> TILE_IVORY
     }

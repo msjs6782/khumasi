@@ -38,6 +38,9 @@ class GameRenderer(
     @Volatile var reduceMotion = false
         set(value) { field = value; board.reduceMotion = value }
     @Volatile var quality = Quality(shadows = true, glass = true, ambient = true)
+    @Volatile var tileTheme: TileTheme = Themes.tile("ivory")
+    @Volatile var skyTheme: SkyTheme = Themes.sky("day")
+    @Volatile var colorBlind = false
     @Volatile var failed = false
         private set
 
@@ -47,6 +50,9 @@ class GameRenderer(
 
     private var islandLevel = 0
     private var islandDirty = true
+    private var islandPopAt = 0L
+    private var confettiAt = 0L
+    private val confetti = Confetti(90)
 
     // World view: the board slides away and the camera moves in on the island (round results).
     private var worldFrom = 0f
@@ -76,6 +82,7 @@ class GameRenderer(
     private lateinit var progSea: ShaderProgram
     private lateinit var progIsland: ShaderProgram
     private lateinit var progBlur: ShaderProgram
+    private lateinit var progFlat: ShaderProgram
     private lateinit var atlas: LetterAtlas
     private var shadow: ShadowTarget? = null
     private lateinit var noShadow: ShadowTarget
@@ -124,6 +131,21 @@ class GameRenderer(
     }
 
     fun markBusy(until: Long) { busyUntil = max(busyUntil, until) }
+
+    /** Win celebration: confetti over the board, starting at [startAt] (uptime ms). */
+    fun celebrate(startAt: Long) {
+        if (reduceMotion) return
+        confettiAt = startAt
+        confetti.reset(startAt)
+        markBusy(startAt + Confetti.DURATION_MS)
+    }
+
+    /** The island bounces when it grows a level. */
+    fun popIsland(startAt: Long) {
+        if (reduceMotion) return
+        islandPopAt = startAt
+        markBusy(startAt + 900)
+    }
 
     /** Slides the board away to show the island (true) or brings it back (false). */
     fun setWorldView(on: Boolean, animate: Boolean = true) {
@@ -258,6 +280,7 @@ class GameRenderer(
         GLES30.glClear(GLES30.GL_DEPTH_BUFFER_BIT)
         drawSlab(now, glass, shadowTarget != null)
         drawTiles(shadowTarget != null)
+        if (confettiAt != 0L) drawConfetti(now)
         if (!firstFrameLogged) {
             firstFrameLogged = true
             Log.i("KhumasiGL", "first frame ${SystemClock.uptimeMillis() - surfaceCreatedAt} ms after setup")
@@ -274,6 +297,7 @@ class GameRenderer(
         progSea = ShaderProgram("sea", Shaders.SEA_VS, Shaders.SEA_FS)
         progIsland = ShaderProgram("island", Shaders.ISLAND_VS, Shaders.ISLAND_FS)
         progBlur = ShaderProgram("blur", Shaders.BLUR_VS, Shaders.BLUR_FS)
+        progFlat = ShaderProgram("flat", Shaders.TILE_VS, Shaders.FLAT_FS)
 
         tileMesh = MeshBuilder().apply { roundedBox(TILE, TILE, TILE_DEPTH, TILE_BEVEL, 4) }.build()
         slabMesh = MeshBuilder().apply { roundedBox(SLAB_W, SLAB_H, SLAB_DEPTH, 0.18f, 3) }.build()
@@ -443,10 +467,11 @@ class GameRenderer(
 
     private fun setSceneLight(p: ShaderProgram, light: FloatArray, cam: FloatArray) {
         p.set3f("uLightDir", light)
-        p.set3f("uSunColor", Palette.rgb(Palette.SUN))
+        val sky = skyTheme
+        p.set3f("uSunColor", Palette.rgb(sky.sun))
         p.set3f("uCamPos", cam)
-        p.set3f("uSkyColor", Palette.rgb(0xBFDFFF))
-        p.set3f("uGroundColor", Palette.rgb(Palette.GROUND))
+        p.set3f("uSkyColor", Palette.rgb(sky.ambientSky))
+        p.set3f("uGroundColor", Palette.rgb(sky.ground))
     }
 
     private fun drawSlab(now: Long, glass: Boolean, shadows: Boolean) {
@@ -489,8 +514,10 @@ class GameRenderer(
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, atlas.textureId)
         p.set1i("uAtlas", 0)
-        val ivory = Palette.rgb(Palette.TILE_IVORY)
-        val ink = Palette.rgb(Palette.TILE_INK)
+        val theme = tileTheme
+        val cb = colorBlind
+        val ivory = Palette.rgb(theme.face)
+        val ink = Palette.rgb(theme.ink)
         val white = Palette.rgb(Palette.RESULT_INK)
         for (i in tileModels.indices) {
             val pose = tilePoses[i]
@@ -500,7 +527,12 @@ class GameRenderer(
             p.set3f("uFrontColor", ivory)
             p.set3f("uFrontInk", ink)
             p.set4f("uFrontCell", cell[0], cell[1], cell[2], cell[3])
-            val back = Palette.rgb(Palette.forState(if (pose.result == LetterState.UNKNOWN) LetterState.ABSENT else pose.result))
+            val back = Palette.rgb(Palette.forState(if (pose.result == LetterState.UNKNOWN) LetterState.ABSENT else pose.result, cb))
+            p.set1f("uSymbol", if (!cb) 0f else when (pose.result) {
+                LetterState.CORRECT -> 1f
+                LetterState.PRESENT -> 2f
+                else -> 0f
+            })
             p.set3f("uBackColor", back)
             p.set3f("uBackInk", white)
             p.set4f("uBackCell", cell[0], cell[1], cell[2], cell[3])
@@ -516,6 +548,13 @@ class GameRenderer(
         Matrix.setIdentityM(m, 0)
         val angle = if (ambient) 25f + time * 3.2f else 25f
         Matrix.rotateM(m, 0, angle, 0f, 1f, 0f)
+        if (islandPopAt != 0L) {
+            val p = (SystemClock.uptimeMillis() - islandPopAt) / 850f
+            if (p in 0f..1f) {
+                val s = 1f + 0.1f * sin(Math.PI.toFloat() * p) * (1f - p * 0.5f)
+                Matrix.scaleM(m, 0, s, s, s)
+            } else if (p > 1f) islandPopAt = 0L
+        }
         return m
     }
 
@@ -572,9 +611,14 @@ class GameRenderer(
         GLES30.glDepthMask(false)
         GLES30.glDisable(GLES30.GL_DEPTH_TEST)
         progSky.use()
-        progSky.set3f("uZenith", Palette.rgb(Palette.SKY_ZENITH))
-        progSky.set3f("uHorizon", Palette.rgb(Palette.SKY_HORIZON))
-        progSky.set3f("uSunColor", Palette.rgb(Palette.SUN))
+        val sky = skyTheme
+        progSky.set3f("uZenith", Palette.rgb(sky.zenith))
+        progSky.set3f("uHorizon", Palette.rgb(sky.horizon))
+        progSky.set3f("uSunColor", Palette.rgb(sky.sun))
+        progSky.set1f("uStars", sky.stars)
+        progSky.set1f("uAurora", sky.aurora)
+        progSky.set1f("uSunGlow", sky.sunGlow)
+        progSky.set1f("uTime", time)
         progSky.set2f("uSunNdc", sunNdc[0], sunNdc[1])
         progSky.set1f("uHorizonY", horizonNdcY)
         progSky.set1f("uAspect", aspect)
@@ -587,12 +631,12 @@ class GameRenderer(
         progSea.setMat4("uViewProj", bgVP)
         bindShadowUniforms(progSea, withShadows, islandLightVP)
         progSea.set1f("uTime", time)
-        progSea.set3f("uDeep", Palette.rgb(Palette.SEA_DEEP))
-        progSea.set3f("uShallow", Palette.rgb(Palette.SEA_SHALLOW))
-        progSea.set3f("uFoam", Palette.rgb(Palette.FOAM))
-        progSea.set3f("uHorizon", Palette.rgb(Palette.SKY_HORIZON))
-        progSea.set3f("uZenith", Palette.rgb(Palette.SKY_ZENITH))
-        progSea.set3f("uSunColor", Palette.rgb(Palette.SUN))
+        progSea.set3f("uDeep", Palette.rgb(sky.seaDeep))
+        progSea.set3f("uShallow", Palette.rgb(sky.seaShallow))
+        progSea.set3f("uFoam", Palette.rgb(sky.foam))
+        progSea.set3f("uHorizon", Palette.rgb(sky.horizon))
+        progSea.set3f("uZenith", Palette.rgb(sky.zenith))
+        progSea.set3f("uSunColor", Palette.rgb(sky.sun))
         progSea.set3f("uLightDir", normalize(floatArrayOf(-0.5f, 0.16f, -1f)))
         progSea.set3f("uCamPos", bgCam)
         progSea.set1f("uIslandRadius", IslandBuilder.RADIUS)
@@ -608,7 +652,7 @@ class GameRenderer(
         progIsland.set1f("uWind", if (quality.ambient && !reduceMotion) 1f else 0f)
         setSceneLight(progIsland, islandLight, bgCam)
         bindShadowUniforms(progIsland, withShadows, islandLightVP)
-        progIsland.set3f("uHorizon", Palette.rgb(Palette.SKY_HORIZON))
+        progIsland.set3f("uHorizon", Palette.rgb(sky.horizon))
         progIsland.set1f("uFogStart", 60f)
         progIsland.set1f("uFogEnd", 220f)
         progIsland.set1f("uEmissive", 0f)
@@ -641,6 +685,30 @@ class GameRenderer(
             src = a.texture
         }
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
+    }
+
+    private val confettiColors = arrayOf(
+        Palette.rgb(Palette.CORRECT), Palette.rgb(Palette.PRESENT), Palette.rgb(0xF06A8A),
+        Palette.rgb(0x7FB8FF), Palette.rgb(0xFFFFFF), Palette.rgb(0xB78CFF),
+    )
+
+    private fun drawConfetti(now: Long) {
+        if (now - confettiAt > Confetti.DURATION_MS) { confettiAt = 0L; return }
+        if (now < confettiAt) return
+        val p = progFlat
+        p.use()
+        p.setMat4("uViewProj", boardVP)
+        p.setMat4("uLightViewProj", boardLightVP)
+        GLES30.glDisable(GLES30.GL_CULL_FACE)
+        val t = (now - confettiAt) / 1000f
+        val m = FloatArray(16)
+        for (i in 0 until confetti.count) {
+            if (!confetti.pose(i, t, m, boardModel)) continue
+            p.setMat4("uModel", m)
+            p.set3f("uColor", confettiColors[i % confettiColors.size])
+            quadMesh.draw()
+        }
+        GLES30.glEnable(GLES30.GL_CULL_FACE)
     }
 
     companion object {

@@ -39,6 +39,32 @@ class Store(context: Context) {
     var haptics: Boolean
         get() = prefs.getBoolean("haptics", true)
         set(v) = prefs.edit().putBoolean("haptics", v).apply()
+    var sound: Boolean
+        get() = prefs.getBoolean("sound", true)
+        set(v) = prefs.edit().putBoolean("sound", v).apply()
+    var music: Boolean
+        get() = prefs.getBoolean("music", false)
+        set(v) = prefs.edit().putBoolean("music", v).apply()
+    var colorBlind: Boolean
+        get() = prefs.getBoolean("color_blind", false)
+        set(v) = prefs.edit().putBoolean("color_blind", v).apply()
+    /** 0 small, 1 medium, 2 large. */
+    var textSize: Int
+        get() = prefs.getInt("text_size", 1).coerceIn(0, 2)
+        set(v) = prefs.edit().putInt("text_size", v).apply()
+    var showTimer: Boolean
+        get() = prefs.getBoolean("show_timer", false)
+        set(v) = prefs.edit().putBoolean("show_timer", v).apply()
+    var hardMode: Boolean
+        get() = prefs.getBoolean("hard_mode", false)
+        set(v) = prefs.edit().putBoolean("hard_mode", v).apply()
+    var tileTheme: String
+        get() = prefs.getString("tile_theme", "ivory") ?: "ivory"
+        set(v) = prefs.edit().putString("tile_theme", v).apply()
+    var skyTheme: String
+        get() = prefs.getString("sky_theme", "day") ?: "day"
+        set(v) = prefs.edit().putString("sky_theme", v).apply()
+
     var seenRules: Boolean
         get() = prefs.getBoolean("seen_rules", false)
         set(v) = prefs.edit().putBoolean("seen_rules", v).apply()

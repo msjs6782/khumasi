@@ -13,6 +13,13 @@ data class Stats(
 ) {
     val winRatePercent: Int get() = if (played == 0) 0 else Math.round(wins * 100f / played)
 
+    /** Average attempts over won rounds, or 0 when there are none. */
+    val averageAttempts: Float get() {
+        val w = distribution.sum()
+        if (w == 0) return 0f
+        return distribution.withIndex().sumOf { (i, n) -> (i + 1) * n }.toFloat() / w
+    }
+
     fun record(won: Boolean, attempts: Int): Stats {
         val dist = distribution.toMutableList()
         while (dist.size < GameState.DEFAULT_ATTEMPTS) dist.add(0)
@@ -36,6 +43,8 @@ data class Progress(
     val discovered: Set<String> = emptySet(),
     /** Answers already used, oldest first, to avoid repeating solutions. */
     val recentAnswers: List<String> = emptyList(),
+    /** Fastest unassisted win (active play time), 0 when none yet. */
+    val bestWinMs: Long = 0L,
 ) {
     val totalWins: Int get() = unassisted.wins + assisted.wins
     val islandLevel: Int get() = Island.levelFor(totalWins)
@@ -46,6 +55,7 @@ data class Progress(
             unassisted = if (state.usedHelp) unassisted else unassisted.record(won, state.guesses.size),
             assisted = if (state.usedHelp) assisted.record(won, state.guesses.size) else assisted,
             discovered = if (won) discovered + state.answer else discovered,
+            bestWinMs = if (won && !state.usedHelp && state.playedMs > 0 && (bestWinMs == 0L || state.playedMs < bestWinMs)) state.playedMs else bestWinMs,
         )
     }
 

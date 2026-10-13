@@ -53,6 +53,25 @@ shot 09_light 8 --es demo_answer "مدرسة" --es demo_guesses "سيارة,مك
 shot 10_stats 6 --es demo_answer "مدرسة" --ez demo_stats true --ei demo_wins 20
 shot 11_settings 6 --es demo_answer "مدرسة" --ez demo_settings true
 
+# Phase 2: tutorial, rewards, color-blind mode, sky themes, hard mode, timer.
+shot 21_tutorial 6 --es demo_answer "مدرسة" --ez demo_tutorial true
+shot 22_rewards 9 --es demo_answer "مدرسة" --ez demo_rewards true --ei demo_wins 30
+shot 23_colorblind 8 --es demo_answer "مدرسة" --es demo_guesses "سيارة,مكتبة,درجات" --es demo_input "مد" --ez demo_colorblind true --ez demo_timer true
+shot 24_sunset 9 --es demo_answer "مدرسة" --es demo_guesses "مكتبة,مدرسة" --ez demo_result true --ei demo_wins 30 --es demo_sky sunset --es demo_tiles sand --ez demo_colorblind false --ez demo_timer false
+shot 25_night 9 --es demo_answer "مدرسة" --es demo_guesses "سيارة,مكتبة" --ei demo_wins 30 --es demo_sky night --es demo_tiles night
+shot 26_aurora 9 --es demo_answer "مدرسة" --es demo_guesses "مكتبة,مدرسة" --ez demo_result true --ei demo_wins 60 --es demo_sky aurora --es demo_tiles gold
+shot 27_settings 6 --es demo_answer "مدرسة" --ez demo_settings true --es demo_sky day --es demo_tiles ivory
+# Hard mode: after مكتبة, سيارة breaks the rules (first letter must stay م).
+adb shell am force-stop "$PKG"
+adb logcat -d >> "$OUT/logcat_part0.txt"
+adb logcat -c
+adb shell am start -W -n "$PKG/$ACT" --es demo_answer "مدرسة" --es demo_guesses "مكتبة" --es demo_input "سيارة" --ez demo_hard true --ez demo_submit true >/dev/null
+for _ in $(seq 1 120); do adb logcat -d -s KhumasiDemo:I | grep -q submitted && break; sleep 0.1; done
+sleep 0.3
+adb exec-out screencap -p > "$OUT/28_hard_mode.png"
+adb shell am start -W -n "$PKG/$ACT" --ez demo_hard false --es demo_answer "مدرسة" >/dev/null
+sleep 2
+
 # A short 16:9 phone (360x640 dp): the board and keyboard must fit without clipping.
 adb shell wm size 1080x1920
 adb shell wm density 480

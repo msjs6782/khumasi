@@ -15,7 +15,7 @@ import kotlin.math.sin
 @SuppressLint("ViewConstructor")
 class IconView(context: Context, private val kind: Kind, description: String) : View(context) {
 
-    enum class Kind { HELP, STATS, SETTINGS, CLOSE, SHARE, FLAG, NEXT }
+    enum class Kind { HELP, STATS, SETTINGS, CLOSE, SHARE, FLAG, NEXT, ISLAND }
 
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -89,6 +89,20 @@ class IconView(context: Context, private val kind: Kind, description: String) : 
                 path.lineTo(cx - s * 0.45f, cy + s * 0.05f)
                 path.close()
                 canvas.drawPath(path, fill)
+            }
+            Kind.ISLAND -> {
+                // island with a palm
+                oval.set(cx - s * 0.7f, cy + s * 0.18f, cx + s * 0.7f, cy + s * 0.62f)
+                canvas.drawOval(oval, fill)
+                path.reset()
+                path.moveTo(cx - s * 0.05f, cy + s * 0.3f)
+                path.quadTo(cx + s * 0.05f, cy - s * 0.15f, cx + s * 0.18f, cy - s * 0.42f)
+                canvas.drawPath(path, stroke)
+                val tx = cx + s * 0.18f; val ty = cy - s * 0.42f
+                canvas.drawLine(tx, ty, tx - s * 0.42f, ty + s * 0.1f, stroke)
+                canvas.drawLine(tx, ty, tx + s * 0.38f, ty + s * 0.16f, stroke)
+                canvas.drawLine(tx, ty, tx - s * 0.12f, ty - s * 0.3f, stroke)
+                canvas.drawLine(tx, ty, tx + s * 0.28f, ty - s * 0.22f, stroke)
             }
             Kind.NEXT -> {
                 // circular arrow (new word)

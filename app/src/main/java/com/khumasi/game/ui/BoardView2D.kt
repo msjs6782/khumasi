@@ -22,6 +22,7 @@ import kotlin.math.min
 @SuppressLint("ViewConstructor")
 class BoardView2D(context: Context, private val fonts: Fonts) : View(context) {
     private var state: GameState? = null
+    var colorBlind = false
     private val region = RectF()
     private val tilePaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; typeface = fonts.heavy }
@@ -64,7 +65,7 @@ class BoardView2D(context: Context, private val fonts: Fonts) : View(context) {
             tilePaint.color = when {
                 letter == null -> opaque(Palette.SOCKET)
                 st == null -> opaque(Palette.TILE_IVORY)
-                else -> opaque(Palette.forState(st))
+                else -> opaque(Palette.forState(st, colorBlind))
             }
             canvas.drawRoundRect(x, y, x + size, y + size, size * 0.16f, size * 0.16f, tilePaint)
             if (letter != null) {

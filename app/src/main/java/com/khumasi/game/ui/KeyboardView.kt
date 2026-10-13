@@ -33,6 +33,10 @@ class KeyboardView(context: Context, private val fonts: Fonts) : View(context) {
 
     var listener: Listener? = null
     var haptics = true
+    var colorBlind = false
+        set(value) { field = value; invalidate() }
+    /** Called with every key press (sound effects). */
+    var onKeySound: ((isDelete: Boolean) -> Unit)? = null
     var enterLabel = "تحقّق"
         set(value) { field = value; invalidate() }
 
@@ -65,6 +69,7 @@ class KeyboardView(context: Context, private val fonts: Fonts) : View(context) {
         color = UiColors.TEXT
     }
     private val iconPath = Path()
+    private val symbolPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
 
     private val repeatHandler = Handler(Looper.getMainLooper())
     private val repeatDelete = object : Runnable {
@@ -112,7 +117,7 @@ class KeyboardView(context: Context, private val fonts: Fonts) : View(context) {
                 row[1].rect.set(pad, y, pad + half, y + keyH)          // delete (left)
             }
         }
-        textPaint.textSize = min(keyH * 0.56f, letterW * 0.86f)
+        textPaint.textSize = min(keyH * 0.56f * TextScale.factor, letterW * 0.92f)
         bubbleTextSize = min(keyH * 0.85f, letterW * 1.3f)
         iconPaint.strokeWidth = dp(2.2f)
     }
@@ -124,8 +129,8 @@ class KeyboardView(context: Context, private val fonts: Fonts) : View(context) {
             val state = if (key.kind == LETTER) states[key.ch] ?: LetterState.UNKNOWN else LetterState.UNKNOWN
             val fill = when {
                 key.kind == ENTER -> opaque(Palette.CORRECT)
-                state == LetterState.CORRECT -> opaque(Palette.CORRECT)
-                state == LetterState.PRESENT -> opaque(Palette.PRESENT)
+                state == LetterState.CORRECT -> opaque(Palette.forState(state, colorBlind))
+                state == LetterState.PRESENT -> opaque(Palette.forState(state, colorBlind))
                 state == LetterState.ABSENT -> UiColors.KEY_ABSENT
                 else -> UiColors.KEY
             }
@@ -143,6 +148,14 @@ class KeyboardView(context: Context, private val fonts: Fonts) : View(context) {
                     textPaint.color = if (state == LetterState.ABSENT) UiColors.KEY_ABSENT_TEXT else UiColors.TEXT
                     textPaint.typeface = fonts.bold
                     drawCentered(canvas, key.ch.toString(), cx, cy)
+                    if (colorBlind && (state == LetterState.CORRECT || state == LetterState.PRESENT)) {
+                        val sx = r.right - r.width() * 0.2f
+                        val sy = r.top + r.width() * 0.2f + lift
+                        val rad = r.width() * 0.09f
+                        symbolPaint.style = if (state == LetterState.CORRECT) Paint.Style.FILL else Paint.Style.STROKE
+                        symbolPaint.strokeWidth = rad * 0.5f
+                        canvas.drawCircle(sx, sy, rad, symbolPaint)
+                    }
                 }
                 ENTER -> {
                     textPaint.color = UiColors.PRIMARY_TEXT
@@ -173,8 +186,7 @@ class KeyboardView(context: Context, private val fonts: Fonts) : View(context) {
         canvas.drawRoundRect(bubbleRect.left, bubbleRect.top + dp(3f), bubbleRect.right, bubbleRect.bottom + dp(3f), radius, radius, shadePaint)
         val state = states[key.ch] ?: LetterState.UNKNOWN
         keyPaint.color = when (state) {
-            LetterState.CORRECT -> opaque(Palette.CORRECT)
-            LetterState.PRESENT -> opaque(Palette.PRESENT)
+            LetterState.CORRECT, LetterState.PRESENT -> opaque(Palette.forState(state, colorBlind))
             else -> opaque(Palette.TILE_IVORY)
         }
         canvas.drawRoundRect(bubbleRect, radius, radius, keyPaint)
@@ -246,6 +258,7 @@ class KeyboardView(context: Context, private val fonts: Fonts) : View(context) {
                 pointerKeys[event.getPointerId(i)] = key
                 key.pressed = true
                 if (haptics) performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                if (key.kind != ENTER) onKeySound?.invoke(key.kind == DELETE)
                 when (key.kind) {
                     LETTER -> listener?.onLetter(key.ch)
                     DELETE -> {

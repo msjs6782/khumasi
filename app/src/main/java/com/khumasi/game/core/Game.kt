@@ -2,7 +2,7 @@ package com.khumasi.game.core
 
 enum class GameStatus { PLAYING, WON, LOST }
 
-enum class RejectReason { TOO_SHORT, NOT_IN_LIST, ALREADY_TRIED, GAME_OVER }
+enum class RejectReason { TOO_SHORT, NOT_IN_LIST, ALREADY_TRIED, HARD_MODE, GAME_OVER }
 
 /**
  * One round. Immutable; every action returns a new state. Evaluations are derived from the
@@ -16,6 +16,8 @@ data class GameState(
     val maxAttempts: Int = DEFAULT_ATTEMPTS,
     val mode: String = MODE_CLASSIC,
     val usedHelp: Boolean = false,
+    /** Hard mode: every guess must keep the greens in place and use every revealed letter. */
+    val hardMode: Boolean = false,
     /** Active play time, counted only while the game screen is visible. */
     val playedMs: Long = 0L,
     val startedAtEpochMs: Long = 0L,
@@ -48,6 +50,9 @@ data class GameState(
         if (word.length < length) return SubmitResult.Rejected(RejectReason.TOO_SHORT, this)
         if (word in guesses) return SubmitResult.Rejected(RejectReason.ALREADY_TRIED, this)
         if (word != answer && !isAccepted(word)) return SubmitResult.Rejected(RejectReason.NOT_IN_LIST, this)
+        if (hardMode) {
+            HardMode.violation(word, guesses, answer)?.let { return SubmitResult.Rejected(RejectReason.HARD_MODE, this, it) }
+        }
 
         val newGuesses = guesses + word
         val status = when {
@@ -69,5 +74,29 @@ data class GameState(
 
 sealed interface SubmitResult {
     data class Accepted(val state: GameState, val evaluation: List<LetterState>) : SubmitResult
-    data class Rejected(val reason: RejectReason, val state: GameState) : SubmitResult
+    data class Rejected(val reason: RejectReason, val state: GameState, val detail: String? = null) : SubmitResult
+}
+
+/** Hard-mode rule check, with a message naming the first rule the guess breaks. */
+object HardMode {
+    private val ORDINALS = listOf("الأول", "الثاني", "الثالث", "الرابع", "الخامس", "السادس", "السابع")
+
+    fun violation(word: String, guesses: List<String>, answer: String): String? {
+        for (g in guesses) {
+            val e = Evaluator.evaluate(g, answer)
+            for (i in g.indices) {
+                if (e[i] == LetterState.CORRECT && word[i] != g[i]) {
+                    return "الحرف ${ORDINALS.getOrElse(i) { (i + 1).toString() }} يجب أن يكون «${g[i]}»"
+                }
+            }
+            val need = LinkedHashMap<Char, Int>()
+            for (i in g.indices) if (e[i] != LetterState.ABSENT) need[g[i]] = (need[g[i]] ?: 0) + 1
+            for ((ch, n) in need) {
+                if (word.count { it == ch } < n) {
+                    return if (n == 1) "يجب أن تحتوي الكلمة على «$ch»" else "يجب أن تحتوي الكلمة على «$ch» مرتين على الأقل"
+                }
+            }
+        }
+        return null
+    }
 }

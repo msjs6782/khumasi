@@ -23,7 +23,11 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.khumasi.game.audio.SoundFx
 import com.khumasi.game.core.ArabicNormalizer
+import com.khumasi.game.core.LetterState
+import com.khumasi.game.core.Reward
+import com.khumasi.game.core.Rewards
 import com.khumasi.game.core.GameState
 import com.khumasi.game.core.GameStatus
 import com.khumasi.game.core.GuessList
@@ -40,6 +44,8 @@ import com.khumasi.game.render.BoardAnimator
 import com.khumasi.game.render.GameRenderer
 import com.khumasi.game.render.GameSurfaceView
 import com.khumasi.game.render.Palette
+import com.khumasi.game.render.Themes
+import com.khumasi.game.ui.TextScale
 import com.khumasi.game.ui.BoardView2D
 import com.khumasi.game.ui.Fonts
 import com.khumasi.game.ui.IconView
@@ -73,6 +79,8 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     private lateinit var toast: TextView
     private lateinit var sheets: SheetHost
     private lateinit var skipLayer: View
+    private lateinit var timerView: TextView
+    private lateinit var sfx: SoundFx
 
     private lateinit var solutions: List<Solution>
     @Volatile private var guesses: GuessList? = null
@@ -83,6 +91,8 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     private val loader = Executors.newSingleThreadExecutor()
     private var pendingResult: Runnable? = null
     private var pendingLevelUp = false
+    private var pendingRewards: List<Reward> = emptyList()
+    private var refreshingRewards = false
     private var inputLockedUntil = 0L
     private var resumedAt = 0L
     private var lastRegion = floatArrayOf(0f, 0f, 0f, 0f)
@@ -111,6 +121,8 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         demo = BuildConfig.DEBUG && intent?.extras?.keySet()?.any { it.startsWith("demo_") } == true
         reduceMotion = store.reduceMotion || (demo && intent.getBooleanExtra("demo_reduce", false))
         lightMode = store.lightMode || (demo && intent.getBooleanExtra("demo_light", false))
+        TextScale.factor = TextScale.forSetting(store.textSize)
+        sfx = SoundFx(this).apply { soundOn = store.sound; musicOn = store.music }
 
         solutions = repo.loadSolutions()
         progress = store.loadProgress()
@@ -132,7 +144,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         Log.i(TAG, "UI ready in ${SystemClock.uptimeMillis() - createdAt} ms")
         when {
             demo -> scheduleDemoActions()
-            !store.seenRules -> handler.postDelayed({ showRules(); store.seenRules = true }, 500)
+            !store.seenRules -> handler.postDelayed({ showTutorial(); store.seenRules = true }, 500)
             state.isOver -> handler.postDelayed({ showResult(levelUp = false) }, 350)
         }
     }
@@ -146,11 +158,12 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
             )
         }
 
-        board2d = BoardView2D(this, fonts).apply { visibility = View.GONE }
+        board2d = BoardView2D(this, fonts).apply { visibility = View.GONE; colorBlind = store.colorBlind }
         renderer = GameRenderer(fonts.heavy, this)
         renderer.reduceMotion = reduceMotion
         renderer.quality = if (lightMode) GameRenderer.Quality(shadows = false, glass = false, ambient = false)
         else GameRenderer.Quality(shadows = true, glass = true, ambient = true)
+        applyLooks()
         val gl = GameSurfaceView(this, wantMsaa = !lightMode).also { it.attach(renderer) }
         surface = gl
         root.addView(gl, FrameLayout.LayoutParams(MATCH, MATCH))
@@ -168,11 +181,22 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         val title = label("خماسي", 27f, fonts.heavy, Color.WHITE).apply {
             setShadowLayer(dp(6f), 0f, dp(1.5f), 0x99000000.toInt())
         }
+        timerView = label("", 13f, fonts.bold, Color.WHITE).apply {
+            setShadowLayer(dp(4f), 0f, dp(1f), 0x99000000.toInt())
+            visibility = View.GONE
+        }
+        val titleBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            addView(title)
+            addView(timerView)
+        }
+        val islandBtn = IconView(this, IconView.Kind.ISLAND, "الجزيرة والمكافآت").apply { setOnClickListener { showRewards() } }
         val statsBtn = IconView(this, IconView.Kind.STATS, "الإحصاءات").apply { setOnClickListener { showStats() } }
         val settingsBtn = IconView(this, IconView.Kind.SETTINGS, "الإعدادات").apply { setOnClickListener { showSettings() } }
         header.addView(help, LinearLayout.LayoutParams(dpi(48f), dpi(48f)))
-        header.addView(View(this), LinearLayout.LayoutParams(dpi(48f), 1))
-        header.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        header.addView(islandBtn, LinearLayout.LayoutParams(dpi(48f), dpi(48f)))
+        header.addView(titleBox, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         header.addView(statsBtn, LinearLayout.LayoutParams(dpi(48f), dpi(48f)))
         header.addView(settingsBtn, LinearLayout.LayoutParams(dpi(48f), dpi(48f)))
         root.addView(header, FrameLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
@@ -188,6 +212,8 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         keyboard = KeyboardView(this, fonts).apply {
             listener = this@MainActivity
             haptics = store.haptics
+            colorBlind = store.colorBlind
+            onKeySound = { isDelete -> sfx.play(if (isDelete) SoundFx.Fx.DELETE else SoundFx.Fx.TAP, 0.45f) }
         }
         keyboardPanel.addView(keyboard, FrameLayout.LayoutParams(MATCH, MATCH))
         resultBar = LinearLayout(this).apply {
@@ -294,11 +320,16 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         super.onResume()
         surface?.onResume()
         resumedAt = SystemClock.uptimeMillis()
+        sfx.onResume()
+        handler.removeCallbacks(tickTimer)
+        handler.post(tickTimer)
     }
 
     override fun onPause() {
         accumulatePlayTime()
         store.saveGame(state)
+        sfx.onPause()
+        handler.removeCallbacks(tickTimer)
         surface?.onPause()
         super.onPause()
     }
@@ -306,6 +337,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
         loader.shutdownNow()
+        sfx.release()
         super.onDestroy()
     }
 
@@ -364,7 +396,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         }
         val levelBefore = progress.islandLevel
         when (val result = state.submit { word -> list?.contains(word) == true }) {
-            is SubmitResult.Rejected -> reject(result.reason)
+            is SubmitResult.Rejected -> reject(result.reason, result.detail)
             is SubmitResult.Accepted -> {
                 accumulatePlayTime()
                 state = result.state
@@ -379,8 +411,12 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
                     val t = SystemClock.uptimeMillis()
                     val end = board.reveal(row, word, result.evaluation, t)
                     board.activeRow = if (over) -1 else row + 1
-                    if (won) board.bounce(row, end + 60)
+                    if (won) {
+                        board.bounce(row, end + 60)
+                        celebrate(end + 60)
+                    }
                 }
+                playRevealSounds(result.evaluation, reveal, won, state.status == GameStatus.LOST)
                 board2d.show(state)
                 handler.postDelayed({ updateKeyboard() }, reveal)
                 if (state.isOver) onRoundOver(levelBefore, reveal) else store.saveGame(state)
@@ -391,14 +427,16 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     private fun canType(): Boolean =
         !state.isOver && !sheets.isShowing && SystemClock.uptimeMillis() >= inputLockedUntil
 
-    private fun reject(reason: RejectReason) {
+    private fun reject(reason: RejectReason, detail: String? = null) {
         val msg = when (reason) {
             RejectReason.TOO_SHORT -> "أكمل خمسة أحرف"
             RejectReason.NOT_IN_LIST -> "ليست في قائمة الكلمات"
             RejectReason.ALREADY_TRIED -> "جرّبت هذه الكلمة من قبل"
+            RejectReason.HARD_MODE -> detail ?: "الوضع الصعب: استخدم الحروف المكتشفة"
             RejectReason.GAME_OVER -> return
         }
         showToast(msg)
+        sfx.play(SoundFx.Fx.INVALID, 0.5f)
         val row = state.currentRow
         surface?.send { board.shake(row, SystemClock.uptimeMillis()) }
         if (store.haptics) {
@@ -414,6 +452,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         progress = progress.recordRound(state)
         store.saveRound(state, progress)
         val levelUp = progress.islandLevel > levelBefore
+        pendingRewards = Rewards.newlyUnlocked(levelBefore, progress.islandLevel)
         val won = state.status == GameStatus.WON
         if (won && store.haptics) {
             handler.postDelayed({
@@ -443,6 +482,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         updateRoundUi()
         showResult(pendingLevelUp)
         pendingLevelUp = false
+        pendingRewards = emptyList()
     }
 
     private fun startNewRound() {
@@ -460,7 +500,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         val pool = solutions.filter { it.word !in reported }.ifEmpty { solutions }
         val pick = SolutionPicker.pick(pool, progress)
         progress = progress.rememberAnswer(pick.word, pool.size)
-        return GameState(answer = pick.word, startedAtEpochMs = System.currentTimeMillis())
+        return GameState(answer = pick.word, startedAtEpochMs = System.currentTimeMillis(), hardMode = store.hardMode)
     }
 
     private fun syncBoard(animate: Boolean) {
@@ -490,11 +530,17 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         if (!state.isOver) return
         // The board slides away so the island shows above the result.
         surface?.send { setWorldView(true) }
+        if (levelUp) {
+            surface?.send { popIsland(SystemClock.uptimeMillis() + 650) }
+            handler.postDelayed({ sfx.play(SoundFx.Fx.LEVEL_UP, 0.6f) }, 650)
+        }
         val content = panels.result(
             state, solutionFor(state.answer), progress, levelUp,
             onNext = { startNewRound() },
             onShare = { share() },
             onReport = { showReport() },
+            newRewards = pendingRewards,
+            onIsland = { showRewards() },
         )
         sheets.show(panels.resultTitle(state), content, dismissible = true, maxHeightFraction = 0.64f) {
             // Closing the result brings the board back so the player can look at their guesses.
@@ -508,22 +554,95 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     private fun showStats() = sheets.show("الإحصاءات", panels.stats(progress))
 
     private fun showSettings() {
-        val s = Panels.SettingsState(store.reduceMotion, store.lightMode, store.haptics)
-        val view = panels.settings(s, "\u2066" + BuildConfig.VERSION_NAME + "\u2069") { st, lightChanged ->
-            store.reduceMotion = st.reduceMotion
-            store.haptics = st.haptics
-            store.lightMode = st.lightMode
-            reduceMotion = st.reduceMotion
-            renderer.reduceMotion = st.reduceMotion
-            sheets.reduceMotion = st.reduceMotion
-            keyboard.haptics = st.haptics
-            surface?.invalidateScene()
-            if (lightChanged) {
-                // Anti-aliasing is chosen when the surface is created, so rebuild the screen.
-                handler.postDelayed({ recreate() }, 250)
+        val s = Panels.SettingsState(
+            store.sound, store.music, store.haptics, store.colorBlind, store.textSize, store.showTimer,
+            store.reduceMotion, store.lightMode, store.hardMode,
+        )
+        var needsRebuild = false
+        val view = panels.settings(s, "\u2066" + BuildConfig.VERSION_NAME + "\u2069", onTutorial = { showTutorial() }) { st, change ->
+            when (change) {
+                Panels.Change.AUDIO -> {
+                    store.sound = st.sound; store.music = st.music; store.haptics = st.haptics
+                    sfx.soundOn = st.sound; sfx.musicOn = st.music
+                    keyboard.haptics = st.haptics
+                }
+                Panels.Change.LOOK -> {
+                    store.colorBlind = st.colorBlind; store.showTimer = st.showTimer
+                    applyLooks()
+                }
+                Panels.Change.TEXT -> { store.textSize = st.textSize; needsRebuild = true }
+                Panels.Change.MOTION -> {
+                    store.reduceMotion = st.reduceMotion
+                    reduceMotion = st.reduceMotion
+                    renderer.reduceMotion = st.reduceMotion
+                    sheets.reduceMotion = st.reduceMotion
+                }
+                // Anti-aliasing is chosen when the surface is created, so the screen is rebuilt.
+                Panels.Change.LIGHT_MODE -> { store.lightMode = st.lightMode; needsRebuild = true }
+                Panels.Change.GAMEPLAY -> {
+                    store.hardMode = st.hardMode
+                    showToast(if (st.hardMode) "الوضع الصعب يبدأ من الجولة التالية" else "يعود الوضع العادي من الجولة التالية")
+                }
             }
+            surface?.invalidateScene()
         }
-        sheets.show("الإعدادات", view)
+        sheets.show("الإعدادات", view) { if (needsRebuild) handler.postDelayed({ recreate() }, 150) }
+    }
+
+    /** Applies theme, color-blind and timer choices to the renderer and the 2D views. */
+    private fun applyLooks() {
+        val level = progress.islandLevel
+        renderer.tileTheme = Themes.tile(Rewards.resolve(Reward.Kind.TILES, store.tileTheme, level).id)
+        renderer.skyTheme = Themes.sky(Rewards.resolve(Reward.Kind.SKY, store.skyTheme, level).id)
+        renderer.colorBlind = store.colorBlind
+        if (::keyboard.isInitialized) keyboard.colorBlind = store.colorBlind
+        if (::board2d.isInitialized) { board2d.colorBlind = store.colorBlind; board2d.show(state) }
+        if (::timerView.isInitialized) timerView.visibility = if (store.showTimer) View.VISIBLE else View.GONE
+        surface?.invalidateScene()
+    }
+
+    private fun showRewards() {
+        surface?.send { setWorldView(true) }
+        val view = panels.rewards(progress, store.tileTheme, store.skyTheme) { r ->
+            if (r.kind == Reward.Kind.TILES) store.tileTheme = r.id else store.skyTheme = r.id
+            applyLooks()
+            sfx.play(SoundFx.Fx.CORRECT, 0.5f)
+            refreshingRewards = true
+            showRewards() // redraw the list with the new choice; the island stays in view
+            refreshingRewards = false
+        }
+        sheets.show("الجزيرة والمكافآت", view, maxHeightFraction = 0.6f) {
+            if (!refreshingRewards) surface?.send { setWorldView(false) }
+        }
+    }
+
+    private fun showTutorial() = sheets.show("أهلًا بك في خماسي", panels.tutorial(reduceMotion) { sheets.close() }, maxHeightFraction = 0.75f)
+
+    private val tickTimer = object : Runnable {
+        override fun run() {
+            if (store.showTimer) {
+                val ms = state.playedMs + if (state.isOver) 0 else SystemClock.uptimeMillis() - resumedAt
+                val sec = (ms / 1000).toInt()
+                timerView.text = "${com.khumasi.game.ui.ar(sec / 60)}:${com.khumasi.game.ui.ar(sec % 60).padStart(2, '٠')}"
+            }
+            handler.postDelayed(this, 1000)
+        }
+    }
+
+    /** One sound per tile as it turns over, then the win or lose phrase. */
+    private fun playRevealSounds(evaluation: List<LetterState>, revealMs: Long, won: Boolean, lost: Boolean) {
+        val stagger = if (reduceMotion) 0L else BoardAnimator.FLIP_STAGGER_MS
+        val firstAt = if (reduceMotion) 0L else BoardAnimator.FLIP_MS / 2
+        for ((i, st) in evaluation.withIndex()) {
+            val fx = when (st) {
+                LetterState.CORRECT -> SoundFx.Fx.CORRECT
+                LetterState.PRESENT -> SoundFx.Fx.PRESENT
+                else -> SoundFx.Fx.ABSENT
+            }
+            handler.postDelayed({ sfx.play(fx, if (reduceMotion) 0.35f else 0.55f) }, firstAt + i * stagger)
+        }
+        if (won) handler.postDelayed({ sfx.play(SoundFx.Fx.WIN, 0.7f) }, revealMs + 120)
+        if (lost) handler.postDelayed({ sfx.play(SoundFx.Fx.LOSE, 0.6f) }, revealMs + 120)
     }
 
     private fun showReport() {
@@ -572,11 +691,16 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     private fun applyDemo() {
         val i = intent
         store.seenRules = true
+        if (i.hasExtra("demo_colorblind")) store.colorBlind = i.getBooleanExtra("demo_colorblind", false)
+        i.getStringExtra("demo_sky")?.let { store.skyTheme = it }
+        i.getStringExtra("demo_tiles")?.let { store.tileTheme = it }
+        if (i.hasExtra("demo_hard")) store.hardMode = i.getBooleanExtra("demo_hard", false)
+        if (i.hasExtra("demo_timer")) store.showTimer = i.getBooleanExtra("demo_timer", false)
         val wins = i.getIntExtra("demo_wins", -1)
         if (wins >= 0) progress = progress.copy(unassisted = Stats(played = wins + wins / 4, wins = wins, currentStreak = minOf(wins, 3), bestStreak = minOf(wins, 6)))
         val answer = i.getStringExtra("demo_answer")?.let { ArabicNormalizer.normalize(it) }
         if (answer != null && answer.length == 5) {
-            var s = GameState(answer = answer, startedAtEpochMs = System.currentTimeMillis(), playedMs = 83_000)
+            var s = GameState(answer = answer, startedAtEpochMs = System.currentTimeMillis(), playedMs = 83_000, hardMode = store.hardMode)
             val words = i.getStringExtra("demo_guesses").orEmpty().split(',').map { ArabicNormalizer.normalize(it) }.filter { it.length == 5 }
             for (w in words) {
                 s = w.fold(s) { acc, c -> acc.type(c) }
@@ -604,6 +728,8 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         if (i.getBooleanExtra("demo_rules", false)) handler.postDelayed({ showRules() }, 600)
         if (i.getBooleanExtra("demo_stats", false)) handler.postDelayed({ showStats() }, 600)
         if (i.getBooleanExtra("demo_settings", false)) handler.postDelayed({ showSettings() }, 600)
+        if (i.getBooleanExtra("demo_rewards", false)) handler.postDelayed({ showRewards() }, 600)
+        if (i.getBooleanExtra("demo_tutorial", false)) handler.postDelayed({ showTutorial() }, 600)
         if (i.getBooleanExtra("demo_result", false) && state.isOver) handler.postDelayed({ showResult(levelUp = false) }, 900)
         if (state.isOver && !i.getBooleanExtra("demo_result", false)) updateRoundUi()
         if (i.getBooleanExtra("demo_keys", false)) handler.postDelayed({ keyboard.logKeyPositions() }, 2500)

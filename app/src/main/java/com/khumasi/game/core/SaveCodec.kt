@@ -19,6 +19,7 @@ object SaveCodec {
             "max" to s.maxAttempts.toString(),
             "mode" to s.mode,
             "help" to if (s.usedHelp) "1" else "0",
+            "hard" to if (s.hardMode) "1" else "0",
             "playedMs" to s.playedMs.toString(),
             "startedAt" to s.startedAtEpochMs.toString(),
         )
@@ -50,6 +51,7 @@ object SaveCodec {
                 maxAttempts = max,
                 mode = m["mode"] ?: GameState.MODE_CLASSIC,
                 usedHelp = m["help"] == "1",
+                hardMode = m["hard"] == "1",
                 playedMs = m["playedMs"]?.toLongOrNull() ?: 0L,
                 startedAtEpochMs = m["startedAt"]?.toLongOrNull() ?: 0L,
             )
@@ -63,6 +65,7 @@ object SaveCodec {
             "a" to encodeStats(p.assisted),
             "discovered" to p.discovered.sorted().joinToString(","),
             "recent" to p.recentAnswers.joinToString(","),
+            "bestMs" to p.bestWinMs.toString(),
         )
     )
 
@@ -77,6 +80,7 @@ object SaveCodec {
                 assisted = decodeStats(m["a"]),
                 discovered = m["discovered"].orEmpty().split(',').filter { ArabicNormalizer.isClean(it) }.toSet(),
                 recentAnswers = m["recent"].orEmpty().split(',').filter { ArabicNormalizer.isClean(it) },
+                bestWinMs = m["bestMs"]?.toLongOrNull()?.coerceAtLeast(0) ?: 0L,
             )
         }.getOrNull()
     }

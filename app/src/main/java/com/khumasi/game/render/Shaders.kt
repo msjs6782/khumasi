@@ -95,6 +95,12 @@ void main() {
     vec2 uv = vec2(vObjPos.x / (2.0 * uHalf.x) + 0.5, 0.5 - vObjPos.y / (2.0 * uHalf.y));
     if (!front) uv.y = 1.0 - uv.y; // the back face is read after a half turn about X
     float m = letterMask(front ? uFrontCell : uBackCell, uv) * faceMask;
+    if (!front && uSymbol > 0.5) {
+        // Color-blind symbols in the corner: a dot for "correct", a ring for "elsewhere".
+        float r = length(uv - vec2(0.17, 0.17));
+        float sym = uSymbol < 1.5 ? smoothstep(0.08, 0.065, r) : smoothstep(0.016, 0.004, abs(r - 0.06));
+        m = max(m, sym * faceMask);
+    }
     float edge = 1.0 - 0.22 * (1.0 - abs(nz));
     vec3 albedo = toLinear(mix(base, ink, m)) * edge;
 
@@ -239,13 +245,28 @@ uniform vec3 uSunColor;
 uniform vec2 uSunNdc;
 uniform float uHorizonY;
 uniform float uAspect;
+uniform float uStars;
+uniform float uAurora;
+uniform float uSunGlow;
+uniform float uTime;
 out vec4 fragColor;
 void main() {
     float t = clamp((vNdc.y - uHorizonY) / (1.0 - uHorizonY), 0.0, 1.0);
     vec3 col = mix(toLinear(uHorizon), toLinear(uZenith), pow(t, 0.75));
     vec2 d = (vNdc - uSunNdc) * vec2(uAspect, 1.0);
     float r = length(d);
-    col += toLinear(uSunColor) * (exp(-r * 9.0) * 0.9 + exp(-r * 2.2) * 0.22);
+    col += toLinear(uSunColor) * (exp(-r * 9.0) * 0.9 + exp(-r * 2.2) * 0.22) * uSunGlow;
+    if (uStars > 0.0) {
+        vec2 cell = floor(gl_FragCoord.xy / 3.0);
+        float h = fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453);
+        float tw = 0.6 + 0.4 * sin(uTime * 2.0 + h * 40.0);
+        col += vec3(step(0.9965, h) * uStars * t * tw);
+    }
+    if (uAurora > 0.0) {
+        float y = vNdc.y - (uHorizonY + 0.32) - 0.07 * sin(vNdc.x * 3.1 + uTime * 0.25) - 0.03 * sin(vNdc.x * 7.0 - uTime * 0.4);
+        float band = exp(-y * y * 30.0) * (0.6 + 0.4 * sin(vNdc.x * 11.0 + uTime * 0.6));
+        col += uAurora * band * vec3(0.05, 0.55, 0.32);
+    }
     fragColor = vec4(toSrgb(col), 1.0);
 }
 """
@@ -375,6 +396,19 @@ void main() {
     float fog = smoothstep(uFogStart, uFogEnd, length(vWorldPos - uCamPos));
     col = mix(col, toLinear(uHorizon), fog);
     fragColor = vec4(toSrgb(col), 1.0);
+}
+"""
+
+    // ---------------------------------------------------------------- confetti
+
+    const val FLAT_FS = """#version 300 es
+precision mediump float;
+in vec3 vNormal;
+uniform vec3 uColor;
+out vec4 fragColor;
+void main() {
+    float shade = 0.6 + 0.4 * abs(normalize(vNormal).z);
+    fragColor = vec4(uColor * shade, 1.0);
 }
 """
 

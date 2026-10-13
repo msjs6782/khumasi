@@ -47,10 +47,16 @@ fun opaque(rgb: Int): Int = 0xFF000000.toInt() or rgb
 /** Arabic-Indic digits for numbers shown in the interface. */
 fun ar(n: Int): String = com.khumasi.game.core.ShareText.toArabicDigits(n)
 
+/** Player-chosen text size (settings), applied to all interface text. */
+object TextScale {
+    var factor = 1f
+    fun forSetting(v: Int) = when (v) { 0 -> 0.9f; 2 -> 1.15f; else -> 1f }
+}
+
 fun Context.label(text: CharSequence, size: Float, typeface: Typeface, color: Int = Color.WHITE, gravity: Int = Gravity.CENTER): TextView =
     TextView(this).apply {
         this.text = text
-        textSize = size
+        textSize = size * TextScale.factor
         this.typeface = typeface
         setTextColor(color)
         this.gravity = gravity
