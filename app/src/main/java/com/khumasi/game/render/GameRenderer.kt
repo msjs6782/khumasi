@@ -404,7 +404,7 @@ class GameRenderer(
         val playDist = (IslandBuilder.RADIUS * 1.02f) / max(0.12f, tanH)
         val worldDist = (IslandBuilder.RADIUS * 1.18f) / max(0.12f, tanH)
         val dist = playDist + (worldDist - playDist) * w
-        val el = Math.toRadians(8.5 + 13.0 * w).toFloat()
+        val el = Math.toRadians(8.5 + 2.5 * w).toFloat() // low enough to keep the horizon and sky in view
         val tx = 0f; val ty = 0.9f - 0.3f * w; val tz = 0f
         bgCam[0] = tx; bgCam[1] = ty + dist * sin(el); bgCam[2] = tz + dist * cos(el)
         Matrix.setLookAtM(bgView, 0, bgCam[0], bgCam[1], bgCam[2], tx, ty, tz, 0f, 1f, 0f)
@@ -729,7 +729,7 @@ class GameRenderer(
         const val BOARD_FOV = 26f
         const val FIT = 0.97f
         const val ISLAND_NDC_Y = 0.5f
-        const val WORLD_NDC_Y = 0.42f
+        const val WORLD_NDC_Y = 0.36f
         const val WORLD_MS = 900L
         const val SHADOW_SIZE = 1024
 

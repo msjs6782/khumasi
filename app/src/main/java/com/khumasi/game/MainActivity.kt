@@ -267,6 +267,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         }
         root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updateRegion() }
         hideSystemBars()
+        applyLooks() // again now that the keyboard, flat board and timer exist
     }
 
     private fun layoutKeyboard() {
