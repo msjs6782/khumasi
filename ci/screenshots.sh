@@ -87,6 +87,12 @@ if [ "${#KX[@]}" -ge 35 ]; then
   for ch in م د ر س; do tap "$ch"; done
   tap ي; tap DELETE; tap ة
   adb exec-out screencap -p > "$OUT/14_typed_before_submit.png"
+  # Close the app completely and reopen it normally: the round must come back as it was.
+  adb shell am force-stop "$PKG"
+  sleep 1
+  adb shell am start -W -n "$PKG/$ACT" >/dev/null
+  sleep 7
+  adb exec-out screencap -p > "$OUT/14b_restored_after_restart.png"
   tap ENTER
   sleep 2.2
   adb exec-out screencap -p > "$OUT/15_win_animation.png"
