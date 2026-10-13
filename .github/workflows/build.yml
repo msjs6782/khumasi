@@ -1,0 +1,140 @@
+name: Build, test and release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      signed: ${{ steps.signing.outputs.signed }}
+      version: ${{ steps.names.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Prepare release signing
+        id: signing
+        env:
+          PASS: ${{ secrets.KHUMASI_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$PASS" ]; then
+            {
+              echo "KHUMASI_KEYSTORE=$GITHUB_WORKSPACE/signing/khumasi-release.p12"
+              echo "KHUMASI_KEYSTORE_PASSWORD=$PASS"
+              echo "KHUMASI_KEY_PASSWORD=$PASS"
+              echo "KHUMASI_KEY_ALIAS=khumasi"
+            } >> "$GITHUB_ENV"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::KHUMASI_KEYSTORE_PASSWORD secret is missing; the release APK will not be published."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Build APKs
+        run: ./gradlew assembleDebug assembleRelease --no-daemon
+
+      - name: Name and verify APKs
+        id: names
+        run: |
+          VERSION="0.1.${GITHUB_RUN_NUMBER}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          mkdir -p out
+          cp app/build/outputs/apk/debug/app-debug.apk out/khumasi-debug.apk
+          cp app/build/outputs/apk/release/app-release.apk "out/khumasi-${VERSION}.apk"
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs "out/khumasi-${VERSION}.apk" | grep -E "SHA-256|DN" | tee out/signature.txt
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apks
+          path: out/
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-reports
+          path: app/build/reports/tests/
+
+  ui-check:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: apks
+          path: out
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run on an Android emulator and take screenshots
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          disable-animations: true
+          script: bash ci/screenshots.sh out/khumasi-debug.apk screenshots
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: screenshots/
+
+  release:
+    needs: [build, ui-check]
+    if: needs.build.outputs.signed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: apks
+          path: out
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          cp "out/khumasi-${VERSION}.apk" khumasi.apk
+          {
+            echo "نسخة تجريبية من «خماسي — عالم الكلمات»."
+            echo
+            echo "نزّل ملف khumasi.apk وثبّته. كل نسخة جديدة تُثبَّت فوق السابقة دون فقدان تقدمك."
+            echo
+            echo "بصمة التوقيع:"
+            echo '```'
+            cat out/signature.txt
+            echo '```'
+          } > notes.md
+          gh release create "v${VERSION}" khumasi.apk --title "خماسي ${VERSION}" --notes-file notes.md --latest

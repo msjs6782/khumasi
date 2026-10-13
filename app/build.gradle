@@ -1,0 +1,66 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+// Every CI build gets a higher version code, so each APK installs as an update over the last one.
+def runNumber = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as Integer
+
+android {
+    namespace 'com.khumasi.game'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.khumasi.game'
+        minSdk 26
+        targetSdk 35
+        versionCode runNumber
+        versionName "0.1.$runNumber"
+    }
+
+    // The release key lives only in GitHub Actions secrets, never in the repository. Keeping the
+    // same key is what lets new versions install over old ones without losing progress.
+    signingConfigs {
+        release {
+            def ks = System.getenv('KHUMASI_KEYSTORE')
+            if (ks != null && new File(ks).exists()) {
+                storeFile file(ks)
+                storePassword System.getenv('KHUMASI_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KHUMASI_KEY_ALIAS')
+                keyPassword System.getenv('KHUMASI_KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release.storeFile != null ? signingConfigs.release : signingConfigs.debug
+        }
+        debug {
+            applicationIdSuffix '.debug'
+            versionNameSuffix '-debug'
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.activity:activity-ktx:1.9.3'
+    testImplementation 'junit:junit:4.13.2'
+}
