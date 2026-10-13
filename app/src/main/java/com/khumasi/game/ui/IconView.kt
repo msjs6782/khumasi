@@ -15,7 +15,7 @@ import kotlin.math.sin
 @SuppressLint("ViewConstructor")
 class IconView(context: Context, private val kind: Kind, description: String) : View(context) {
 
-    enum class Kind { HELP, STATS, SETTINGS, CLOSE, SHARE, FLAG, NEXT, ISLAND }
+    enum class Kind { HELP, STATS, SETTINGS, CLOSE, SHARE, FLAG, NEXT, ISLAND, HINT }
 
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -89,6 +89,14 @@ class IconView(context: Context, private val kind: Kind, description: String) : 
                 path.lineTo(cx - s * 0.45f, cy + s * 0.05f)
                 path.close()
                 canvas.drawPath(path, fill)
+            }
+            Kind.HINT -> {
+                // light bulb
+                canvas.drawCircle(cx, cy - s * 0.15f, s * 0.42f, stroke)
+                canvas.drawLine(cx - s * 0.18f, cy + s * 0.42f, cx + s * 0.18f, cy + s * 0.42f, stroke)
+                canvas.drawLine(cx - s * 0.12f, cy + s * 0.62f, cx + s * 0.12f, cy + s * 0.62f, stroke)
+                canvas.drawLine(cx - s * 0.16f, cy + s * 0.22f, cx - s * 0.18f, cy + s * 0.42f, stroke)
+                canvas.drawLine(cx + s * 0.16f, cy + s * 0.22f, cx + s * 0.18f, cy + s * 0.42f, stroke)
             }
             Kind.ISLAND -> {
                 // island with a palm

@@ -23,6 +23,9 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.khumasi.game.ai.AiHelper
+import com.khumasi.game.ai.GeminiClient
+import com.khumasi.game.ai.KeyVault
 import com.khumasi.game.audio.SoundFx
 import com.khumasi.game.core.ArabicNormalizer
 import com.khumasi.game.core.LetterState
@@ -81,6 +84,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     private lateinit var skipLayer: View
     private lateinit var timerView: TextView
     private lateinit var sfx: SoundFx
+    private lateinit var ai: AiHelper
 
     private lateinit var solutions: List<Solution>
     @Volatile private var guesses: GuessList? = null
@@ -123,6 +127,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         lightMode = store.lightMode || (demo && intent.getBooleanExtra("demo_light", false))
         TextScale.factor = TextScale.forSetting(store.textSize)
         sfx = SoundFx(this).apply { soundOn = store.sound; musicOn = store.music }
+        ai = AiHelper(this, KeyVault(this))
 
         solutions = repo.loadSolutions()
         progress = store.loadProgress()
@@ -193,11 +198,13 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         }
         val islandBtn = IconView(this, IconView.Kind.ISLAND, "الجزيرة والمكافآت").apply { setOnClickListener { showRewards() } }
         val statsBtn = IconView(this, IconView.Kind.STATS, "الإحصاءات").apply { setOnClickListener { showStats() } }
+        val hintBtn = IconView(this, IconView.Kind.HINT, "تلميح").apply { setOnClickListener { showHints() } }
         val settingsBtn = IconView(this, IconView.Kind.SETTINGS, "الإعدادات").apply { setOnClickListener { showSettings() } }
         header.addView(help, LinearLayout.LayoutParams(dpi(48f), dpi(48f)))
         header.addView(islandBtn, LinearLayout.LayoutParams(dpi(48f), dpi(48f)))
         header.addView(titleBox, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        header.addView(statsBtn, LinearLayout.LayoutParams(dpi(48f), dpi(48f)))
+        header.addView(hintBtn, LinearLayout.LayoutParams(dpi(46f), dpi(46f)))
+        header.addView(statsBtn, LinearLayout.LayoutParams(dpi(46f), dpi(46f)))
         header.addView(settingsBtn, LinearLayout.LayoutParams(dpi(48f), dpi(48f)))
         root.addView(header, FrameLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
 
@@ -542,6 +549,8 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
             onReport = { showReport() },
             newRewards = pendingRewards,
             onIsland = { showRewards() },
+            onExplain = { showAiReply("شرح الكلمة", "") { ai.explain(solutionFor(state.answer), state.answer, it) } },
+            onAnalyze = { showAiReply("تحليل جولتك", "الألوان محسوبة بدقة داخل اللعبة؛ Gemini يكتب الملاحظات فقط.") { ai.analyze(state, solutionFor(state.answer), it) } },
         )
         sheets.show(panels.resultTitle(state), content, dismissible = true, maxHeightFraction = 0.64f) {
             // Closing the result brings the board back so the player can look at their guesses.
@@ -587,6 +596,23 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
             }
             surface?.invalidateScene()
         }
+        (view as LinearLayout).addView(panels.aiSettings(Panels.AiSettings(
+            masked = ai.vault.masked(),
+            model = ai.model,
+            usedToday = ai.usedToday,
+            limit = AiHelper.DAILY_LIMIT,
+            onSave = { ai.vault.save(it) },
+            onTest = { report ->
+                ai.test { r ->
+                    report(when (r) {
+                        is GeminiClient.Result.Ok -> "يعمل ✓ (النموذج: ${r.model})"
+                        is GeminiClient.Result.Failed -> "لم ينجح: ${r.message}"
+                    })
+                }
+            },
+            onClear = { ai.vault.clear() },
+            onModel = { ai.model = it },
+        )))
         sheets.show("الإعدادات", view) { if (needsRebuild) handler.postDelayed({ recreate() }, 150) }
     }
 
@@ -627,6 +653,45 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
                 timerView.text = "${com.khumasi.game.ui.ar(sec / 60)}:${com.khumasi.game.ui.ar(sec % 60).padStart(2, '٠')}"
             }
             handler.postDelayed(this, 1000)
+        }
+    }
+
+    // ------------------------------------------------------------------ hints and AI
+
+    private fun showHints() {
+        if (state.isOver) { showToast("التلميحات متاحة أثناء الجولة"); return }
+        val sol = solutionFor(state.answer)
+        val hints = (1..state.hintsUsed).map { ai.revealedHint(it, state, sol) }
+        val (view, _) = panels.hintSheet(hints, state.hintsUsed < AiHelper.MAX_HINTS, state.usedHelp) { requestHint() }
+        sheets.show("تلميح", view, maxHeightFraction = 0.6f)
+    }
+
+    private fun requestHint() {
+        val level = state.hintsUsed + 1
+        if (level > AiHelper.MAX_HINTS || state.isOver) return
+        val reply = panels.replyView(if (ai.vault.hasKey) "Gemini يكتب تلميحًا لا يكشف الكلمة…" else "")
+        sheets.show("التلميح ${com.khumasi.game.ui.ar(level)}", reply.root, maxHeightFraction = 0.6f)
+        val answer = state.answer
+        ai.hint(level, state, solutionFor(answer)) { r ->
+            if (state.answer != answer || state.isOver) return@hint
+            state = state.withHint()
+            store.saveGame(state)
+            reply.body.text = r.text
+            reply.note.text = when {
+                r.fromAi -> "✨ من Gemini"
+                r.note != null -> "تلميح من اللعبة (${r.note})"
+                else -> "تلميح من اللعبة"
+            }
+            sfx.play(SoundFx.Fx.PRESENT, 0.4f)
+        }
+    }
+
+    private fun showAiReply(title: String, intro: String, request: ((AiHelper.Reply) -> Unit) -> Unit) {
+        val reply = panels.replyView(intro)
+        sheets.show(title, reply.root, maxHeightFraction = 0.64f) { if (state.isOver) surface?.send { setWorldView(false) }; updateRoundUi() }
+        request { r ->
+            reply.body.text = r.text
+            reply.note.text = if (r.fromAi) "✨ من Gemini" else r.note.orEmpty()
         }
     }
 
@@ -730,6 +795,10 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         if (i.getBooleanExtra("demo_stats", false)) handler.postDelayed({ showStats() }, 600)
         if (i.getBooleanExtra("demo_settings", false)) handler.postDelayed({ showSettings() }, 600)
         if (i.getBooleanExtra("demo_rewards", false)) handler.postDelayed({ showRewards() }, 600)
+        if (i.getBooleanExtra("demo_hint", false)) handler.postDelayed({ requestHint() }, 900)
+        if (i.getBooleanExtra("demo_scroll_ai", false)) handler.postDelayed({
+            (sheets.findViewWithTag<View>("sheet_scroll") as? android.widget.ScrollView)?.fullScroll(View.FOCUS_DOWN)
+        }, 1500)
         if (i.getBooleanExtra("demo_tutorial", false)) handler.postDelayed({ showTutorial() }, 600)
         if (i.getBooleanExtra("demo_result", false) && state.isOver) handler.postDelayed({ showResult(levelUp = false) }, 900)
         if (state.isOver && !i.getBooleanExtra("demo_result", false)) updateRoundUi()

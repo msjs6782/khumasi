@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Progress and settings are backed up; the encrypted Gemini key and AI cache are not. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="khumasi_secure.xml" />
+    <exclude domain="sharedpref" path="khumasi_ai_cache.xml" />
+</full-backup-content>

@@ -76,6 +76,10 @@ adb exec-out screencap -p > "$OUT/28_hard_mode.png"
 adb shell am start -W -n "$PKG/$ACT" --ez demo_hard false --es demo_answer "مدرسة" >/dev/null
 sleep 2
 
+# Gemini: settings section and an offline hint (no key on the emulator).
+shot 29_ai_settings 6 --es demo_answer "مدرسة" --ez demo_settings true --ez demo_scroll_ai true
+shot 30_hint_offline 8 --es demo_answer "مدرسة" --es demo_guesses "مكتبة" --ez demo_hint true
+
 # A short 16:9 phone (360x640 dp): the board and keyboard must fit without clipping.
 adb shell wm size 1080x1920
 adb shell wm density 480

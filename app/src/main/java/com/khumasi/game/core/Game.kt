@@ -18,6 +18,8 @@ data class GameState(
     val usedHelp: Boolean = false,
     /** Hard mode: every guess must keep the greens in place and use every revealed letter. */
     val hardMode: Boolean = false,
+    /** Hints revealed this round (0-3). Any hint marks the round as assisted. */
+    val hintsUsed: Int = 0,
     /** Active play time, counted only while the game screen is visible. */
     val playedMs: Long = 0L,
     val startedAtEpochMs: Long = 0L,
@@ -63,6 +65,8 @@ data class GameState(
         val next = copy(guesses = newGuesses, input = "", status = status)
         return SubmitResult.Accepted(next, Evaluator.evaluate(word, answer))
     }
+
+    fun withHint(): GameState = if (isOver) this else copy(usedHelp = true, hintsUsed = hintsUsed + 1)
 
     fun addPlayTime(ms: Long): GameState = if (isOver || ms <= 0) this else copy(playedMs = playedMs + ms)
 

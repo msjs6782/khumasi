@@ -76,6 +76,7 @@ class SheetHost(context: Context, private val fonts: Fonts) : FrameLayout(contex
         val scroll = ScrollView(context).apply {
             isFillViewport = false
             isVerticalScrollBarEnabled = false
+            tag = "sheet_scroll"
             addView(content)
         }
         card.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))

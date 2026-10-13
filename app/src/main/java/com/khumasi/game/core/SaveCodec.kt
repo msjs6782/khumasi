@@ -20,6 +20,7 @@ object SaveCodec {
             "mode" to s.mode,
             "help" to if (s.usedHelp) "1" else "0",
             "hard" to if (s.hardMode) "1" else "0",
+            "hints" to s.hintsUsed.toString(),
             "playedMs" to s.playedMs.toString(),
             "startedAt" to s.startedAtEpochMs.toString(),
         )
@@ -52,6 +53,7 @@ object SaveCodec {
                 mode = m["mode"] ?: GameState.MODE_CLASSIC,
                 usedHelp = m["help"] == "1",
                 hardMode = m["hard"] == "1",
+                hintsUsed = m["hints"]?.toIntOrNull()?.coerceIn(0, 3) ?: 0,
                 playedMs = m["playedMs"]?.toLongOrNull() ?: 0L,
                 startedAtEpochMs = m["startedAt"]?.toLongOrNull() ?: 0L,
             )

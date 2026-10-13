@@ -235,6 +235,8 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
         onReport: () -> Unit,
         newRewards: List<Reward> = emptyList(),
         onIsland: () -> Unit = {},
+        onExplain: (() -> Unit)? = null,
+        onAnalyze: (() -> Unit)? = null,
     ): View = column().apply {
         val won = state.status == GameStatus.WON
         val display = solution?.display ?: state.answer
@@ -259,6 +261,7 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
         buttons.addView(button("كلمة جديدة", primary = true, onClick = onNext), LinearLayout.LayoutParams(0, wrap, 1.4f))
         buttons.addView(button("مشاركة", primary = false, onClick = onShare), LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = ctx.dpi(10f) })
         addSpaced(buttons, 14f)
+        if (onExplain != null && onAnalyze != null) addSpaced(aiButtons(onExplain, onAnalyze), 8f)
 
         val wins = progress.totalWins
         val island = when {
@@ -393,6 +396,105 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
         }
         nextBtn.setOnClickListener { if (index < steps.lastIndex) { index++; show() } else onDone() }
         show()
+    }
+
+    // -------------------------------------------------------------- Gemini (personal key)
+
+    class AiSettings(
+        val masked: String?,
+        val model: String,
+        val usedToday: Int,
+        val limit: Int,
+        val onSave: (String) -> Unit,
+        val onTest: ((String) -> Unit) -> Unit,
+        val onClear: () -> Unit,
+        val onModel: (String) -> Unit,
+    )
+
+    fun aiSettings(a: AiSettings): View = column().apply {
+        addSpaced(text("الذكاء الاصطناعي (Gemini)", 14f, bold = true, color = UiColors.ACCENT), 20f)
+        addSpaced(text("للتلميحات وشرح الكلمات وتحليل الجولة. يُحفظ مفتاحك مشفّرًا في جهازك فقط ولا يُنسخ احتياطيًا. اللعب نفسه لا يحتاج الإنترنت.", 13f, color = UiColors.MUTED), 6f)
+        val status = text(if (a.masked != null) "مفعّل: ${a.masked}" else "غير مفعّل", 16f, bold = true,
+            color = if (a.masked != null) opaque(Palette.CORRECT) else UiColors.MUTED)
+        addSpaced(status, 10f)
+        val input = android.widget.EditText(ctx).apply {
+            hint = "الصق مفتاح Gemini API هنا"
+            setHintTextColor(UiColors.MUTED)
+            setTextColor(UiColors.TEXT)
+            textSize = 15f
+            isSingleLine = true
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            textDirection = View.TEXT_DIRECTION_LTR
+            background = rounded(Color.parseColor("#FF131D31"), ctx.dp(12f), UiColors.CARD_LINE, ctx.dpi(1f))
+            setPadding(ctx.dpi(12f), ctx.dpi(10f), ctx.dpi(12f), ctx.dpi(10f))
+        }
+        addSpaced(input, 8f)
+        val result = text("", 13f, color = UiColors.MUTED)
+        val buttons = row()
+        buttons.addView(button("حفظ", primary = true) {
+            val k = input.text.toString().trim()
+            if (k.length < 20) { result.text = "يبدو أن المفتاح غير مكتمل"; return@button }
+            a.onSave(k); input.setText("")
+            status.text = "مفعّل: ••••${k.takeLast(4)}"; status.setTextColor(opaque(Palette.CORRECT))
+            result.text = "حُفظ المفتاح. اضغط «اختبار» للتأكد."
+        }, LinearLayout.LayoutParams(0, wrap, 1f))
+        buttons.addView(button("اختبار", primary = false) {
+            result.text = "جارٍ الاختبار…"
+            a.onTest { msg -> result.text = msg }
+        }, LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = ctx.dpi(8f) })
+        buttons.addView(button("حذف", primary = false) {
+            a.onClear(); status.text = "غير مفعّل"; status.setTextColor(UiColors.MUTED); result.text = "حُذف المفتاح من الجهاز."
+        }, LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = ctx.dpi(8f) })
+        addSpaced(buttons, 8f)
+        addSpaced(result, 6f)
+        addSpaced(text("النموذج", 15f, bold = true), 12f)
+        val model = android.widget.EditText(ctx).apply {
+            setText(a.model)
+            setTextColor(UiColors.TEXT)
+            textSize = 14f
+            isSingleLine = true
+            textDirection = View.TEXT_DIRECTION_LTR
+            background = rounded(Color.parseColor("#FF131D31"), ctx.dp(12f), UiColors.CARD_LINE, ctx.dpi(1f))
+            setPadding(ctx.dpi(12f), ctx.dpi(8f), ctx.dpi(12f), ctx.dpi(8f))
+            setOnFocusChangeListener { _, has -> if (!has) a.onModel(text.toString()) }
+            setOnEditorActionListener { _, _, _ -> a.onModel(text.toString()); false }
+        }
+        addSpaced(model, 6f)
+        addSpaced(text("إذا لم يتوفر هذا النموذج لمفتاحك، تجرّب اللعبة نماذج بديلة تلقائيًا. الاستخدام اليوم: ${ar(a.usedToday)} من ${ar(a.limit)} طلبًا.", 12f, color = UiColors.MUTED), 6f)
+    }
+
+    /** A titled block of AI (or fallback) text, filled in later. */
+    class ReplyView(val root: View, val body: TextView, val note: TextView)
+
+    fun replyView(intro: String): ReplyView {
+        val c = column()
+        if (intro.isNotEmpty()) c.addView(text(intro, 13f, color = UiColors.MUTED))
+        val body = text("لحظة… ✨", 17f)
+        val note = text("", 12f, color = UiColors.MUTED)
+        c.addView(body, LinearLayout.LayoutParams(match, wrap).apply { topMargin = ctx.dpi(8f) })
+        c.addView(note, LinearLayout.LayoutParams(match, wrap).apply { topMargin = ctx.dpi(8f) })
+        return ReplyView(c, body, note)
+    }
+
+    fun hintSheet(hints: List<String>, canAskMore: Boolean, assisted: Boolean, onMore: () -> Unit): Pair<View, ReplyView?> {
+        val c = column()
+        if (!assisted) c.addSpaced(text("التلميحات تجعل هذه الجولة «بمساعدة»، فتُحسب في إحصاءات منفصلة.", 13f, color = UiColors.MUTED), 0f)
+        for ((i, h) in hints.withIndex()) {
+            c.addSpaced(text("التلميح ${ar(i + 1)}", 13f, bold = true, color = UiColors.ACCENT), 12f)
+            c.addSpaced(text(h, 17f), 4f)
+        }
+        var pending: ReplyView? = null
+        if (canAskMore) {
+            c.addSpaced(button(if (hints.isEmpty()) "اطلب تلميحًا" else "تلميح أقوى (${ar(hints.size + 1)} من ٣)", primary = true) { onMore() }, 16f)
+        } else if (hints.size >= 3) {
+            c.addSpaced(text("استخدمت التلميحات الثلاثة لهذه الجولة.", 13f, color = UiColors.MUTED), 14f)
+        }
+        return c to pending
+    }
+
+    fun aiButtons(onExplain: () -> Unit, onAnalyze: () -> Unit): View = row().apply {
+        addView(button("✨ شرح الكلمة", primary = false, onClick = onExplain), LinearLayout.LayoutParams(0, wrap, 1f))
+        addView(button("✨ تحليل جولتي", primary = false, onClick = onAnalyze), LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = ctx.dpi(10f) })
     }
 
     // -------------------------------------------------------------- report a word

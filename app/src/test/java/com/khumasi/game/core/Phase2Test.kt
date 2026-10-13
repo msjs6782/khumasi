@@ -64,3 +64,4 @@ class Phase2Test {
         assertEquals(Rewards.ALL.size, Rewards.ALL.map { it.kind to it.id }.toSet().size)
     }
 }
+
