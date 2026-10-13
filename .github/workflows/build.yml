@@ -47,10 +47,24 @@ jobs:
           fi
 
       - name: Unit tests
-        run: ./gradlew testDebugUnitTest --no-daemon
+        run: |
+          mkdir -p ci-out
+          set -o pipefail
+          ./gradlew testDebugUnitTest --no-daemon --console=plain 2>&1 | tee ci-out/unit-tests.log
 
       - name: Build APKs
-        run: ./gradlew assembleDebug assembleRelease --no-daemon
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug assembleRelease --no-daemon --console=plain 2>&1 | tee ci-out/build.log
+
+      - name: Report build errors
+        if: failure()
+        run: |
+          cat ci-out/*.log 2>/dev/null | grep -E "^e: |error:|What went wrong|FAILED|Exception|> " | head -80 > ci-out/errors.txt || true
+          MSG=$(sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g' ci-out/errors.txt)
+          echo "::error title=Build errors::$MSG"
+          cp -r app/build/reports/tests ci-out/test-reports 2>/dev/null || true
+          cp -r app/build/test-results ci-out/test-results 2>/dev/null || true
 
       - name: Name and verify APKs
         id: names
@@ -69,11 +83,14 @@ jobs:
           name: apks
           path: out/
 
-      - uses: actions/upload-artifact@v4
+      - name: Publish build results to the ci-results branch
         if: always()
-        with:
-          name: unit-test-reports
-          path: app/build/reports/tests/
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p ci-out
+          cp out/signature.txt ci-out/ 2>/dev/null || true
+          bash ci/publish_results.sh ci-out build
 
   ui-check:
     needs: build
@@ -109,6 +126,14 @@ jobs:
         with:
           name: screenshots
           path: screenshots/
+
+      - name: Publish screenshots to the ci-results branch
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p screenshots
+          bash ci/publish_results.sh screenshots ui-check
 
   release:
     needs: [build, ui-check]
