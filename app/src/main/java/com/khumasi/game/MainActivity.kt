@@ -699,7 +699,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
             Intent.ACTION_VIEW -> i.dataString
             else -> null
         } ?: return
-        i.action = null // handle once, not again after rotation or recreate
+        i?.action = null // handle once, not again after rotation or recreate
         if (FriendCode.decode(text) == null) { handler.postDelayed({ showToast("لم أجد رمز تحدٍّ في النص") }, 400); return }
         handler.postDelayed({ showFriendEnter(text) }, 500)
     }
