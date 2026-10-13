@@ -47,9 +47,13 @@ class AiHelper(context: Context, val vault: KeyVault) {
         client.generate(key, models(), prompt, maxTokens) { r ->
             when (r) {
                 is GeminiClient.Result.Ok -> {
-                    val cleaned = check(r.text)
+                    // A reply cut off by the length limit keeps only its complete lines and is not cached.
+                    val cleaned = check(if (r.truncated) HintGuard.completeLines(r.text) else r.text)
                     if (cleaned == null) done(onFail("رُفض رد الذكاء الاصطناعي لأنه قد يكشف الكلمة"))
-                    else { cache.edit().putString(cacheKey, cleaned).apply(); done(Reply(cleaned, true)) }
+                    else {
+                        if (!r.truncated) cache.edit().putString(cacheKey, cleaned).apply()
+                        done(Reply(cleaned, true, if (r.truncated) "الرد كان أطول من المسموح فاختُصر" else null))
+                    }
                 }
                 is GeminiClient.Result.Failed -> done(onFail(r.message))
             }
@@ -98,9 +102,9 @@ class AiHelper(context: Context, val vault: KeyVault) {
 3) مثال قصير على استخدامها في جملة.
 بلا مقدمات وبلا تنسيق Markdown.
 """.trimIndent()
-        ask("explain_$answer", prompt, 600, { reason ->
+        ask("explain2_$answer", prompt, 900, { reason ->
             Reply(solution?.meaning?.let { "المعنى: $it" } ?: "لا يتوفر شرح دون اتصال.", false, reason)
-        }, { HintGuard.tidy(it, 600).ifBlank { null } }, done)
+        }, { HintGuard.tidy(it, 1000).ifBlank { null } }, done)
     }
 
     /** How the colors could have been used better; colors come from the game, not from the AI. */
@@ -120,9 +124,9 @@ $rows
 - نصيحة واحدة عملية للجولة القادمة.
 بلا مقدمات وبلا تنسيق Markdown.
 """.trimIndent()
-        ask("analyze_${state.answer}_${state.guesses.joinToString("")}", prompt, 900, { reason ->
+        ask("analyze2_${state.answer}_${state.guesses.joinToString("")}", prompt, 1200, { reason ->
             Reply("لا يتوفر التحليل الآن.", false, reason)
-        }, { HintGuard.tidy(it, 900).ifBlank { null } }, done)
+        }, { HintGuard.tidy(it, 1400).ifBlank { null } }, done)
     }
 
     /** A tiny request to confirm the key works. */

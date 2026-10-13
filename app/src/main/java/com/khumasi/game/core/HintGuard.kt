@@ -20,10 +20,24 @@ object HintGuard {
         return false
     }
 
-    /** Keeps a short, clean hint: first lines only, no markdown. */
+    /** Keeps a short, clean reply without markdown; a long one is cut at the end of a sentence. */
     fun tidy(text: String, maxChars: Int = 280): String {
         val t = text.replace(Regex("[*#`_]+"), "").replace(Regex("\\n{3,}"), "\n\n").trim()
-        return if (t.length <= maxChars) t else t.take(maxChars).substringBeforeLast(' ') + "…"
+        if (t.length <= maxChars) return t
+        val head = t.take(maxChars)
+        val end = head.indexOfLast { it == '.' || it == '؟' || it == '!' || it == '\n' }
+        return if (end > maxChars / 2) head.take(end + 1).trim() else head.substringBeforeLast(' ') + "…"
+    }
+
+    /**
+     * For a reply that stopped mid-way: drops the unfinished last line, and a trailing heading
+     * such as "2) الجذر:" that has nothing after it.
+     */
+    fun completeLines(text: String): String {
+        val lines = text.trim().lines().toMutableList()
+        if (lines.size > 1) lines.removeAt(lines.lastIndex)
+        while (lines.size > 1 && (lines.last().isBlank() || lines.last().trimEnd().endsWith(":"))) lines.removeAt(lines.lastIndex)
+        return lines.joinToString("\n").trim()
     }
 }
 
