@@ -45,16 +45,41 @@ data class Progress(
     val recentAnswers: List<String> = emptyList(),
     /** Fastest unassisted win (active play time), 0 when none yet. */
     val bestWinMs: Long = 0L,
+    /** Daily challenge results; the streak counts consecutive days won. */
+    val daily: Stats = Stats(),
+    /** Number of the last daily challenge finished (0 = never). */
+    val lastDailyDay: Int = 0,
+    val friendPlayed: Int = 0,
+    val friendWins: Int = 0,
 ) {
-    val totalWins: Int get() = unassisted.wins + assisted.wins
+    val totalWins: Int get() = unassisted.wins + assisted.wins + daily.wins + friendWins
     val islandLevel: Int get() = Island.levelFor(totalWins)
+
+    fun dailyDone(day: Int): Boolean = lastDailyDay == day
+
+    /** The daily streak as it stands today: it is lost once a whole day passes without a win. */
+    fun dailyStreak(today: Int): Int = if (lastDailyDay >= today - 1) daily.currentStreak else 0
 
     fun recordRound(state: GameState): Progress {
         val won = state.status == GameStatus.WON
+        val discoveredNow = if (won) discovered + state.answer else discovered
+        when (state.mode) {
+            GameState.MODE_DAILY -> {
+                val day = state.ref.toIntOrNull() ?: return this
+                if (day <= lastDailyDay) return this // already counted
+                val base = if (lastDailyDay == day - 1) daily else daily.copy(currentStreak = 0)
+                return copy(daily = base.record(won, state.guesses.size), lastDailyDay = day, discovered = discoveredNow)
+            }
+            GameState.MODE_FRIEND -> return copy(
+                friendPlayed = friendPlayed + 1,
+                friendWins = friendWins + if (won) 1 else 0,
+                discovered = discoveredNow,
+            )
+        }
         return copy(
             unassisted = if (state.usedHelp) unassisted else unassisted.record(won, state.guesses.size),
             assisted = if (state.usedHelp) assisted.record(won, state.guesses.size) else assisted,
-            discovered = if (won) discovered + state.answer else discovered,
+            discovered = discoveredNow,
             bestWinMs = if (won && !state.usedHelp && state.playedMs > 0 && (bestWinMs == 0L || state.playedMs < bestWinMs)) state.playedMs else bestWinMs,
         )
     }

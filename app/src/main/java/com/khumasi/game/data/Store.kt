@@ -2,6 +2,7 @@ package com.khumasi.game.data
 
 import android.content.Context
 import com.khumasi.game.core.ArabicNormalizer
+import com.khumasi.game.core.Backup
 import com.khumasi.game.core.GameState
 import com.khumasi.game.core.GuessList
 import com.khumasi.game.core.Progress
@@ -18,14 +19,54 @@ import java.io.InputStreamReader
 class Store(context: Context) {
     private val prefs = context.getSharedPreferences("khumasi", Context.MODE_PRIVATE)
 
-    fun loadGame(): GameState? = SaveCodec.decodeGame(prefs.getString(KEY_GAME, null))
-    fun saveGame(state: GameState) = prefs.edit().putString(KEY_GAME, SaveCodec.encodeGame(state)).apply()
+    /** Each mode keeps its own round, so a daily challenge never replaces an unfinished free round. */
+    private fun gameKey(mode: String) = when (mode) {
+        GameState.MODE_DAILY -> "game_daily"
+        GameState.MODE_FRIEND -> "game_friend"
+        else -> KEY_GAME
+    }
+
+    fun loadGame(mode: String = GameState.MODE_CLASSIC): GameState? =
+        SaveCodec.decodeGame(prefs.getString(gameKey(mode), null))?.takeIf { it.mode == mode }
+
+    fun saveGame(state: GameState) = prefs.edit()
+        .putString(gameKey(state.mode), SaveCodec.encodeGame(state))
+        .putString(KEY_ACTIVE, state.mode)
+        .apply()
 
     /** Saves the round and the statistics together so they can never get out of step. */
     fun saveRound(state: GameState, progress: Progress) = prefs.edit()
-        .putString(KEY_GAME, SaveCodec.encodeGame(state))
+        .putString(gameKey(state.mode), SaveCodec.encodeGame(state))
+        .putString(KEY_ACTIVE, state.mode)
         .putString(KEY_PROGRESS, SaveCodec.encodeProgress(progress))
         .apply()
+
+    /** The mode that was on screen when the app was last closed. */
+    val activeMode: String get() = prefs.getString(KEY_ACTIVE, GameState.MODE_CLASSIC) ?: GameState.MODE_CLASSIC
+
+    // ---------------------------------------------------------------- backup file
+
+    /** Everything in the game's saved data (not the Gemini key or its cache, kept elsewhere). */
+    fun exportBackup(): String = Backup.encode(prefs.all, System.currentTimeMillis())
+
+    /** Replaces the saved data with a backup; false (and nothing changed) if it is not valid. */
+    fun importBackup(text: String): Boolean {
+        val b = Backup.decode(text) ?: return false
+        if (b.values[KEY_PROGRESS] !is String) return false
+        val e = prefs.edit().clear()
+        for ((k, v) in b.values) {
+            @Suppress("UNCHECKED_CAST")
+            when (v) {
+                is String -> e.putString(k, v)
+                is Boolean -> e.putBoolean(k, v)
+                is Int -> e.putInt(k, v)
+                is Long -> e.putLong(k, v)
+                is Float -> e.putFloat(k, v)
+                is Set<*> -> e.putStringSet(k, v as Set<String>)
+            }
+        }
+        return e.commit()
+    }
 
     fun loadProgress(): Progress = SaveCodec.decodeProgress(prefs.getString(KEY_PROGRESS, null)) ?: Progress()
     fun saveProgress(p: Progress) = prefs.edit().putString(KEY_PROGRESS, SaveCodec.encodeProgress(p)).apply()
@@ -85,6 +126,7 @@ class Store(context: Context) {
     companion object {
         private const val KEY_GAME = "game"
         private const val KEY_PROGRESS = "progress"
+        private const val KEY_ACTIVE = "active_mode"
     }
 }
 

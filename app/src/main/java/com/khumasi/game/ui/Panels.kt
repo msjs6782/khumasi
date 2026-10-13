@@ -162,6 +162,9 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
 
     // -------------------------------------------------------------- statistics
 
+    /** Today's daily challenge number, set by the activity (for the streak shown in statistics). */
+    var todayDaily = 0
+
     fun stats(progress: Progress, highlightAttempt: Int? = null): View = column().apply {
         val s = progress.unassisted
         addSpaced(numbers(s), 6f)
@@ -177,6 +180,13 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
         extra.addView(text("الكلمات المكتشفة: ${ar(progress.discovered.size)}", 15f, color = UiColors.MUTED), LinearLayout.LayoutParams(0, wrap, 1f))
         extra.addView(text("الجزيرة: المستوى ${ar(progress.islandLevel)}", 15f, color = UiColors.MUTED))
         addSpaced(extra, 8f)
+        if (progress.daily.played > 0) {
+            addSpaced(text("تحدي اليوم", 17f, bold = true), 18f)
+            addSpaced(numbers(progress.daily.copy(currentStreak = progress.dailyStreak(todayDaily))), 6f)
+        }
+        if (progress.friendPlayed > 0) {
+            addSpaced(text("تحديات الأصدقاء: لعبت ${ar(progress.friendPlayed)}، فزت ${ar(progress.friendWins)}", 14f, color = UiColors.MUTED), 10f)
+        }
         if (progress.assisted.played > 0) {
             val a = progress.assisted
             addSpaced(text("جولات بمساعدة (منفصلة): لعبت ${ar(a.played)}، فزت ${ar(a.wins)}", 14f, color = UiColors.MUTED), 8f)
@@ -237,8 +247,17 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
         onIsland: () -> Unit = {},
         onExplain: (() -> Unit)? = null,
         onAnalyze: (() -> Unit)? = null,
+        nextLabel: String = "كلمة جديدة",
+        banner: String? = null,
+        stats: Stats = progress.unassisted,
     ): View = column().apply {
         val won = state.status == GameStatus.WON
+        banner?.let {
+            addSpaced(text(it, 14f, bold = true, color = UiColors.ACCENT).apply {
+                background = rounded(Color.parseColor("#FF1E2F4F"), ctx.dp(12f))
+                setPadding(ctx.dpi(12f), ctx.dpi(7f), ctx.dpi(12f), ctx.dpi(7f))
+            }, 0f)
+        }
         val display = solution?.display ?: state.answer
         if (!won) addSpaced(text("الكلمة كانت", 14f, color = UiColors.MUTED), 0f)
 
@@ -258,7 +277,7 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
         addSpaced(text("$attempts   •   الوقت: $time", 13f, color = UiColors.MUTED), 4f)
 
         val buttons = row()
-        buttons.addView(button("كلمة جديدة", primary = true, onClick = onNext), LinearLayout.LayoutParams(0, wrap, 1.4f))
+        buttons.addView(button(nextLabel, primary = true, onClick = onNext), LinearLayout.LayoutParams(0, wrap, 1.4f))
         buttons.addView(button("مشاركة", primary = false, onClick = onShare), LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = ctx.dpi(10f) })
         addSpaced(buttons, 14f)
         if (onExplain != null && onAnalyze != null) addSpaced(aiButtons(onExplain, onAnalyze), 8f)
@@ -278,7 +297,7 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
             val kind = if (r.kind == Reward.Kind.TILES) "سمة قطع جديدة" else "سماء جديدة"
             addSpaced(text("🎁 $kind: «${r.name}» — اخترها من المكافآت", 14f, bold = true, color = opaque(Palette.PRESENT)), 6f)
         }
-        addSpaced(numbers(progress.unassisted), 12f)
+        addSpaced(numbers(stats), 12f)
         addSpaced(text("الإبلاغ عن هذه الكلمة", 13f, color = UiColors.MUTED, gravity = Gravity.CENTER).apply {
             setPadding(0, ctx.dpi(10f), 0, ctx.dpi(2f))
             setOnClickListener { onReport() }
@@ -495,6 +514,123 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
     fun aiButtons(onExplain: () -> Unit, onAnalyze: () -> Unit): View = row().apply {
         addView(button("✨ شرح الكلمة", primary = false, onClick = onExplain), LinearLayout.LayoutParams(0, wrap, 1f))
         addView(button("✨ تحليل جولتي", primary = false, onClick = onAnalyze), LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = ctx.dpi(10f) })
+    }
+
+    // -------------------------------------------------------------- play modes (Phase 4)
+
+    class ModesInfo(
+        val current: String,
+        val dailyNumber: Int,
+        val dailyDone: Boolean,
+        val dailyStreak: Int,
+        val nextDailyIn: String,
+        val hasFriendRound: Boolean,
+    )
+
+    private fun card(title: String, subtitle: String, selected: Boolean): LinearLayout = column().apply {
+        background = rounded(if (selected) Color.parseColor("#FF223A5E") else Color.parseColor("#FF1A2740"), ctx.dp(18f),
+            if (selected) UiColors.ACCENT else UiColors.CARD_LINE, ctx.dpi(if (selected) 2f else 1f))
+        setPadding(ctx.dpi(16f), ctx.dpi(12f), ctx.dpi(16f), ctx.dpi(14f))
+        addView(text(title, 19f, bold = true).apply { typeface = fonts.heavy })
+        addSpaced(text(subtitle, 14f, color = UiColors.MUTED), 2f)
+    }
+
+    fun modes(
+        info: ModesInfo,
+        onDaily: () -> Unit,
+        onClassic: () -> Unit,
+        onFriendCreate: () -> Unit,
+        onFriendEnter: () -> Unit,
+        onFriendResume: () -> Unit,
+    ): View = column().apply {
+        val streak = if (info.dailyStreak > 0) "   🔥 ${ar(info.dailyStreak)}" else ""
+        val daily = card("📅 تحدي اليوم ${ar(info.dailyNumber)}$streak",
+            if (info.dailyDone) "أنهيت تحدي اليوم ✓ — التالي بعد ${info.nextDailyIn}"
+            else "كلمة واحدة في اليوم، نفسها عند كل من يلعب. تحافظ على سلسلتك بالفوز كل يوم.",
+            info.current == GameState.MODE_DAILY)
+        daily.addSpaced(button(if (info.dailyDone) "عرض نتيجتي" else if (info.current == GameState.MODE_DAILY) "متابعة" else "العب الآن", primary = !info.dailyDone, onClick = onDaily), 10f)
+        addSpaced(daily, 2f)
+
+        val classic = card("🎲 اللعب الحر", "كلمات عشوائية بلا حدود، وتنمو جزيرتك مع كل فوز.", info.current == GameState.MODE_CLASSIC)
+        if (info.current != GameState.MODE_CLASSIC) classic.addSpaced(button("العب", primary = false, onClick = onClassic), 10f)
+        addSpaced(classic, 12f)
+
+        val friend = card("🤝 تحدي صديق", "اختر كلمة وأرسل رمزها لصديقك، أو الصق رمزًا وصلك.", info.current == GameState.MODE_FRIEND)
+        val r = row()
+        r.addView(button("أنشئ تحديًا", primary = false, onClick = onFriendCreate), LinearLayout.LayoutParams(0, wrap, 1f))
+        r.addView(button("أدخل رمزًا", primary = false, onClick = onFriendEnter), LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = ctx.dpi(10f) })
+        friend.addSpaced(r, 10f)
+        if (info.hasFriendRound && info.current != GameState.MODE_FRIEND) friend.addSpaced(button("متابعة التحدي الحالي", primary = false, onClick = onFriendResume), 8f)
+        addSpaced(friend, 12f)
+    }
+
+    private fun field(hint: String, ltr: Boolean): android.widget.EditText = android.widget.EditText(ctx).apply {
+        this.hint = hint
+        setHintTextColor(UiColors.MUTED)
+        setTextColor(UiColors.TEXT)
+        textSize = 20f
+        typeface = fonts.bold
+        isSingleLine = true
+        gravity = Gravity.CENTER
+        textDirection = if (ltr) View.TEXT_DIRECTION_LTR else View.TEXT_DIRECTION_RTL
+        background = rounded(Color.parseColor("#FF131D31"), ctx.dp(14f), UiColors.CARD_LINE, ctx.dpi(1f))
+        setPadding(ctx.dpi(12f), ctx.dpi(12f), ctx.dpi(12f), ctx.dpi(12f))
+    }
+
+    /** [onCreate] returns an error message, or null when the challenge was made. */
+    fun friendCreate(randomWord: () -> String, onCreate: (String) -> String?): View = column().apply {
+        addSpaced(text("اكتب كلمة من خمسة أحرف ليخمّنها صديقك، أو اختر كلمة عشوائية. يصله رمز لا يُظهر الكلمة.", 15f), 2f)
+        val input = field("الكلمة", ltr = false).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+        }
+        addSpaced(input, 12f)
+        val error = text("", 14f, color = Color.parseColor("#FFFF8A80"))
+        val r = row()
+        r.addView(button("كلمة عشوائية", primary = false) { input.setText(randomWord()); error.text = "" }, LinearLayout.LayoutParams(0, wrap, 1f))
+        r.addView(button("أنشئ وشارك", primary = true) { error.text = onCreate(input.text.toString()) ?: "" },
+            LinearLayout.LayoutParams(0, wrap, 1.2f).apply { marginStart = ctx.dpi(10f) })
+        addSpaced(r, 10f)
+        addSpaced(error, 8f)
+        addSpaced(text("صديقك يحتاج تطبيق خماسي أيضًا. يفتحه ويلصق الرمز من «تحدي صديق ← أدخل رمزًا»، أو يشارك رسالتك مباشرة إلى خماسي.", 13f, color = UiColors.MUTED), 6f)
+    }
+
+    /** [onStart] returns an error message, or null when the round started. */
+    fun friendEnter(prefill: String, onPaste: () -> String?, onStart: (String) -> String?): View = column().apply {
+        addSpaced(text("الصق الرمز الذي وصلك (يبدأ بـ KH) أو الرسالة كاملة.", 15f), 2f)
+        val input = field("KH-XXXX-XXXX-XXXXX", ltr = true).apply {
+            setText(prefill)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            isSingleLine = false
+            maxLines = 3
+        }
+        addSpaced(input, 12f)
+        val error = text("", 14f, color = Color.parseColor("#FFFF8A80"))
+        val r = row()
+        r.addView(button("لصق", primary = false) { onPaste()?.let { input.setText(it) } }, LinearLayout.LayoutParams(0, wrap, 1f))
+        r.addView(button("ابدأ التحدي", primary = true) { error.text = onStart(input.text.toString()) ?: "" },
+            LinearLayout.LayoutParams(0, wrap, 1.3f).apply { marginStart = ctx.dpi(10f) })
+        addSpaced(r, 10f)
+        addSpaced(error, 8f)
+    }
+
+    // -------------------------------------------------------------- backup (sync without a server)
+
+    fun backupSection(lastBackup: String?, onExport: () -> Unit, onImport: () -> Unit): View = column().apply {
+        addSpaced(text("النسخ الاحتياطي والنقل", 14f, bold = true, color = UiColors.ACCENT), 20f)
+        addSpaced(text("احفظ تقدمك وإحصاءاتك وإعداداتك في ملف (على Google Drive مثلًا) واسترجعه على هذا الهاتف أو هاتف آخر. مفتاح Gemini لا يُضمَّن.", 13f, color = UiColors.MUTED), 6f)
+        lastBackup?.let { addSpaced(text("آخر نسخة: $it", 13f, color = UiColors.MUTED), 4f) }
+        val r = row()
+        r.addView(button("حفظ نسخة", primary = false, onClick = onExport), LinearLayout.LayoutParams(0, wrap, 1f))
+        r.addView(button("استرجاع", primary = false, onClick = onImport), LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = ctx.dpi(10f) })
+        addSpaced(r, 8f)
+    }
+
+    fun confirm(message: String, yes: String, onYes: () -> Unit, onNo: () -> Unit): View = column().apply {
+        addSpaced(text(message, 16f), 2f)
+        val r = row()
+        r.addView(button(yes, primary = true, onClick = onYes), LinearLayout.LayoutParams(0, wrap, 1f))
+        r.addView(button("إلغاء", primary = false, onClick = onNo), LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = ctx.dpi(10f) })
+        addSpaced(r, 14f)
     }
 
     // -------------------------------------------------------------- report a word

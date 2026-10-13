@@ -15,6 +15,8 @@ data class GameState(
     val status: GameStatus = GameStatus.PLAYING,
     val maxAttempts: Int = DEFAULT_ATTEMPTS,
     val mode: String = MODE_CLASSIC,
+    /** Daily: the day number. Friend: the challenge code. Empty in free play. */
+    val ref: String = "",
     val usedHelp: Boolean = false,
     /** Hard mode: every guess must keep the greens in place and use every revealed letter. */
     val hardMode: Boolean = false,
@@ -73,6 +75,8 @@ data class GameState(
     companion object {
         const val DEFAULT_ATTEMPTS = 8
         const val MODE_CLASSIC = "classic"
+        const val MODE_DAILY = "daily"
+        const val MODE_FRIEND = "friend"
     }
 }
 

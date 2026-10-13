@@ -19,6 +19,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -28,6 +29,8 @@ import com.khumasi.game.ai.GeminiClient
 import com.khumasi.game.ai.KeyVault
 import com.khumasi.game.audio.SoundFx
 import com.khumasi.game.core.ArabicNormalizer
+import com.khumasi.game.core.Daily
+import com.khumasi.game.core.FriendCode
 import com.khumasi.game.core.LetterState
 import com.khumasi.game.core.Reward
 import com.khumasi.game.core.Rewards
@@ -83,6 +86,8 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     private lateinit var sheets: SheetHost
     private lateinit var skipLayer: View
     private lateinit var timerView: TextView
+    private lateinit var modeView: TextView
+    private lateinit var nextBtn: TextView
     private lateinit var sfx: SoundFx
     private lateinit var ai: AiHelper
 
@@ -105,6 +110,26 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     private var insetTop = 0
     private var insetBottom = 0
     private var demo = false
+
+    // Backup files go through the system file picker, so no storage permission is needed.
+    private val saveBackup = registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri == null) return@registerForActivityResult
+        try {
+            contentResolver.openOutputStream(uri, "wt")?.use { it.write(store.exportBackup().toByteArray(Charsets.UTF_8)) }
+            getSharedPreferences("khumasi_meta", MODE_PRIVATE).edit().putLong("last_backup", System.currentTimeMillis()).apply()
+            showToast("حُفظت النسخة الاحتياطية ✓")
+        } catch (t: Throwable) {
+            Log.e(TAG, "Backup failed", t)
+            showToast("تعذّر حفظ الملف")
+        }
+    }
+    private val openBackup = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@registerForActivityResult
+        val text = try {
+            contentResolver.openInputStream(uri)?.use { it.readBytes().take(2_000_000).toByteArray().toString(Charsets.UTF_8) }
+        } catch (t: Throwable) { null }
+        confirmRestore(text)
+    }
 
     // ------------------------------------------------------------------ setup
 
@@ -131,7 +156,8 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
 
         solutions = repo.loadSolutions()
         progress = store.loadProgress()
-        state = store.loadGame() ?: newRound().also { store.saveRound(it, progress) }
+        panels.todayDaily = today()
+        state = startingState()
         if (demo) applyDemo()
 
         buildUi()
@@ -152,6 +178,22 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
             !store.seenRules -> handler.postDelayed({ showTutorial(); store.seenRules = true }, 500)
             state.isOver -> handler.postDelayed({ showResult(levelUp = false) }, 350)
         }
+        handleIncoming(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIncoming(intent)
+    }
+
+    /** The round to show at launch: the mode last on screen, if it is still valid today. */
+    private fun startingState(): GameState {
+        when (store.activeMode) {
+            GameState.MODE_DAILY -> store.loadGame(GameState.MODE_DAILY)?.takeIf { it.ref == today().toString() }?.let { return it }
+            GameState.MODE_FRIEND -> store.loadGame(GameState.MODE_FRIEND)?.let { return it }
+        }
+        return store.loadGame(GameState.MODE_CLASSIC)?.takeIf { it.mode == GameState.MODE_CLASSIC }
+            ?: newRound().also { store.saveRound(it, progress) }
     }
 
     private fun buildUi() {
@@ -190,11 +232,19 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
             setShadowLayer(dp(4f), 0f, dp(1f), 0x99000000.toInt())
             visibility = View.GONE
         }
+        modeView = label("", 13f, fonts.bold, Color.WHITE).apply {
+            setShadowLayer(dp(4f), 0f, dp(1f), 0x99000000.toInt())
+            alpha = 0.92f
+        }
         val titleBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             addView(title)
+            addView(modeView)
             addView(timerView)
+            contentDescription = "أنماط اللعب: تحدي اليوم، اللعب الحر، تحدي صديق"
+            isClickable = true
+            setOnClickListener { showModes() }
         }
         val islandBtn = IconView(this, IconView.Kind.ISLAND, "الجزيرة والمكافآت").apply { setOnClickListener { showRewards() } }
         val statsBtn = IconView(this, IconView.Kind.STATS, "الإحصاءات").apply { setOnClickListener { showStats() } }
@@ -229,7 +279,8 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
             gravity = Gravity.CENTER
             visibility = View.GONE
             setPadding(dpi(20f), 0, dpi(20f), 0)
-            addView(panels.button("كلمة جديدة", primary = true) { startNewRound() }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.3f))
+            nextBtn = panels.button("كلمة جديدة", primary = true) { startNewRound() }
+            addView(nextBtn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.3f))
             addView(panels.button("النتيجة", primary = false) { showResult(levelUp = false) },
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dpi(10f) })
         }
@@ -269,6 +320,9 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
             header.setPadding(dpi(8f) + side, insetTop + dpi(4f), dpi(8f) + side, dpi(6f))
             (toast.layoutParams as FrameLayout.LayoutParams).topMargin = insetTop + dpi(62f)
             sheets.bottomInset = insetBottom
+            // Keep text fields in sheets above the on-screen keyboard.
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            sheets.setPadding(0, 0, 0, max(0, ime - insetBottom))
             layoutKeyboard()
             insets
         }
@@ -494,6 +548,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     }
 
     private fun startNewRound() {
+        if (state.mode != GameState.MODE_CLASSIC) { switchTo(GameState.MODE_CLASSIC); return }
         sheets.close()
         surface?.send { setWorldView(false) }
         state = newRound()
@@ -501,6 +556,178 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         syncBoard(animate = true)
         updateKeyboard()
         updateRoundUi()
+    }
+
+    // ------------------------------------------------------------------ play modes
+
+    private fun today(): Int {
+        val now = System.currentTimeMillis()
+        return Daily.number(Daily.localEpochDay(now, java.util.TimeZone.getDefault().getOffset(now)))
+    }
+
+    private fun nextDailyIn(): String {
+        val now = System.currentTimeMillis()
+        val min = (Daily.msUntilNext(now, java.util.TimeZone.getDefault().getOffset(now)) / 60_000).toInt()
+        val h = min / 60; val m = min % 60
+        return if (h > 0) "${com.khumasi.game.ui.ar(h)} س ${com.khumasi.game.ui.ar(m)} د" else "${com.khumasi.game.ui.ar(maxOf(m, 1))} د"
+    }
+
+    private fun dailyRound(day: Int): GameState =
+        store.loadGame(GameState.MODE_DAILY)?.takeIf { it.ref == day.toString() }
+            ?: GameState(
+                answer = Daily.word(day, solutions).word, mode = GameState.MODE_DAILY, ref = day.toString(),
+                startedAtEpochMs = System.currentTimeMillis(), hardMode = store.hardMode,
+            )
+
+    /** Puts the current round away (it stays saved) and shows the round for [mode]. */
+    private fun switchTo(mode: String, friendRound: GameState? = null) {
+        val next = when (mode) {
+            GameState.MODE_DAILY -> {
+                val day = today()
+                if (progress.dailyDone(day) && store.loadGame(GameState.MODE_DAILY)?.ref != day.toString()) {
+                    showToast("أنهيت تحدي اليوم. التالي بعد ${nextDailyIn()}"); return
+                }
+                dailyRound(day)
+            }
+            GameState.MODE_FRIEND -> friendRound ?: store.loadGame(GameState.MODE_FRIEND) ?: return
+            else -> store.loadGame(GameState.MODE_CLASSIC)?.takeIf { !it.isOver } ?: newRound()
+        }
+        pendingResult?.let { handler.removeCallbacks(it) }
+        pendingResult = null
+        skipLayer.visibility = View.GONE
+        accumulatePlayTime()
+        store.saveGame(state)
+        sheets.close()
+        surface?.send { setWorldView(false) }
+        state = next
+        store.saveRound(state, progress)
+        syncBoard(animate = true)
+        updateKeyboard()
+        updateRoundUi()
+        if (state.isOver) handler.postDelayed({ showResult(levelUp = false) }, 450)
+        else if (mode == GameState.MODE_DAILY) showToast("تحدي اليوم ${com.khumasi.game.ui.ar(today())} — بالتوفيق!")
+        else if (mode == GameState.MODE_FRIEND && friendRound != null) showToast("تحدي صديق — خمّن كلمته!")
+    }
+
+    private fun updateModeLabel() {
+        if (!::modeView.isInitialized) return
+        val dailyOpen = !progress.dailyDone(today())
+        modeView.text = when (state.mode) {
+            GameState.MODE_DAILY -> "📅 تحدي اليوم ${com.khumasi.game.ui.ar(state.ref.toIntOrNull() ?: 0)} ▾"
+            GameState.MODE_FRIEND -> "🤝 تحدي صديق ▾"
+            else -> if (dailyOpen) "اللعب الحر · تحدي اليوم متاح ▾" else "اللعب الحر ▾"
+        }
+        nextBtn.text = if (state.mode == GameState.MODE_CLASSIC) "كلمة جديدة" else "اللعب الحر"
+    }
+
+    private fun showModes() {
+        val day = today()
+        val info = Panels.ModesInfo(
+            current = state.mode,
+            dailyNumber = day,
+            dailyDone = progress.dailyDone(day),
+            dailyStreak = progress.dailyStreak(day),
+            nextDailyIn = nextDailyIn(),
+            hasFriendRound = store.loadGame(GameState.MODE_FRIEND)?.let { !it.isOver } == true,
+        )
+        sheets.show("أنماط اللعب", panels.modes(info,
+            onDaily = { if (state.mode == GameState.MODE_DAILY) { sheets.close(); if (state.isOver) handler.postDelayed({ showResult(false) }, 300) } else switchTo(GameState.MODE_DAILY) },
+            onClassic = { switchTo(GameState.MODE_CLASSIC) },
+            onFriendCreate = { showFriendCreate() },
+            onFriendEnter = { showFriendEnter("") },
+            onFriendResume = { switchTo(GameState.MODE_FRIEND) },
+        ), maxHeightFraction = 0.8f)
+    }
+
+    private fun showFriendCreate() {
+        sheets.show("تحدي صديق", panels.friendCreate(
+            randomWord = { solutions[kotlin.random.Random.nextInt(solutions.size)].display },
+            onCreate = { raw ->
+                val word = ArabicNormalizer.normalize(raw.trim())
+                val list = guesses
+                when {
+                    word.length != 5 || !word.all { ArabicNormalizer.isGameLetter(it) } -> "اكتب كلمة عربية من خمسة أحرف"
+                    list == null -> "لحظة… يجري تجهيز القاموس"
+                    word !in list && solutions.none { it.word == word } -> "هذه الكلمة ليست في قائمة الكلمات"
+                    else -> { shareChallenge(FriendCode.encode(word)); null }
+                }
+            },
+        ), maxHeightFraction = 0.8f)
+    }
+
+    private fun shareChallenge(code: String) {
+        val text = "🎯 تحدّيتك في خماسي!\nخمّن كلمتي من خمسة أحرف في ثماني محاولات.\n\nالرمز: $code\n\n" +
+            "للعب: افتح خماسي ← اضغط على العنوان ← تحدي صديق ← أدخل رمزًا، أو شارك هذه الرسالة إلى تطبيق خماسي."
+        try {
+            startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text)
+            }, "إرسال التحدي"))
+            sheets.close()
+        } catch (t: Throwable) {
+            showToast("لا يوجد تطبيق للمشاركة")
+        }
+    }
+
+    private fun clipboardText(): String? {
+        val cm = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager ?: return null
+        return cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
+    }
+
+    private fun showFriendEnter(prefill: String) {
+        sheets.show("أدخل رمز التحدي", panels.friendEnter(prefill,
+            onPaste = { clipboardText()?.also { if (FriendCode.decode(it) == null) showToast("لا يوجد رمز صالح في الحافظة") } },
+            onStart = { text -> startFriend(text) },
+        ), maxHeightFraction = 0.8f)
+    }
+
+    /** Starts a friend challenge from text containing a code; returns an error message or null. */
+    private fun startFriend(text: String): String? {
+        val word = FriendCode.decode(text) ?: return "الرمز غير صحيح. تأكد أنه منسوخ كاملًا."
+        val code = Regex("KH[A-Z2-9-]+", RegexOption.IGNORE_CASE).find(text)?.value?.uppercase() ?: word
+        val existing = store.loadGame(GameState.MODE_FRIEND)?.takeIf { it.ref == code }
+        switchTo(GameState.MODE_FRIEND, existing ?: GameState(
+            answer = word, mode = GameState.MODE_FRIEND, ref = code,
+            startedAtEpochMs = System.currentTimeMillis(), hardMode = store.hardMode,
+        ))
+        return null
+    }
+
+    /** A challenge shared to the app from a chat, or opened from a khumasi:// link. */
+    private fun handleIncoming(i: Intent?) {
+        val text = when (i?.action) {
+            Intent.ACTION_SEND -> i.getStringExtra(Intent.EXTRA_TEXT)
+            Intent.ACTION_VIEW -> i.dataString
+            else -> null
+        } ?: return
+        i.action = null // handle once, not again after rotation or recreate
+        if (FriendCode.decode(text) == null) { handler.postDelayed({ showToast("لم أجد رمز تحدٍّ في النص") }, 400); return }
+        handler.postDelayed({ showFriendEnter(text) }, 500)
+    }
+
+    // ------------------------------------------------------------------ backup
+
+    private fun exportBackup() {
+        val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+        try { saveBackup.launch("khumasi-backup-$date.txt") } catch (t: Throwable) { showToast("لا يتوفر مدير ملفات") }
+    }
+
+    private fun importBackup() {
+        try { openBackup.launch(arrayOf("text/plain", "application/octet-stream", "*/*")) } catch (t: Throwable) { showToast("لا يتوفر مدير ملفات") }
+    }
+
+    private fun confirmRestore(text: String?) {
+        val b = text?.let { com.khumasi.game.core.Backup.decode(it) }
+        val p = (b?.values?.get("progress") as? String)?.let { com.khumasi.game.core.SaveCodec.decodeProgress(it) }
+        if (b == null || p == null) { showToast("هذا الملف ليس نسخة احتياطية من خماسي"); return }
+        val date = if (b.createdMs > 0) java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM, java.util.Locale("ar")).format(java.util.Date(b.createdMs)) else "—"
+        val msg = "نسخة بتاريخ $date: ${com.khumasi.game.ui.ar(p.totalWins)} فوزًا، جزيرة بالمستوى ${com.khumasi.game.ui.ar(p.islandLevel)}.\n" +
+            "سيحل محل تقدمك الحالي على هذا الهاتف (${com.khumasi.game.ui.ar(progress.totalWins)} فوزًا). هل تريد المتابعة؟"
+        sheets.show("استرجاع نسخة", panels.confirm(msg, "استرجاع", onYes = {
+            if (store.importBackup(text)) {
+                sheets.close()
+                handler.postDelayed({ recreate() }, 200)
+            } else showToast("تعذّر استرجاع النسخة")
+        }, onNo = { sheets.close() }))
     }
 
     private fun newRound(): GameState {
@@ -528,6 +755,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         val over = state.isOver && pendingResult == null
         keyboard.visibility = if (over) View.INVISIBLE else View.VISIBLE
         resultBar.visibility = if (over) View.VISIBLE else View.GONE
+        updateModeLabel()
     }
 
     // ------------------------------------------------------------------ sheets
@@ -551,6 +779,17 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
             onIsland = { showRewards() },
             onExplain = { showAiReply("شرح الكلمة", "") { ai.explain(solutionFor(state.answer), state.answer, it) } },
             onAnalyze = { showAiReply("تحليل جولتك", "الألوان محسوبة بدقة داخل اللعبة؛ Gemini يكتب الملاحظات فقط.") { ai.analyze(state, solutionFor(state.answer), it) } },
+            nextLabel = if (state.mode == GameState.MODE_CLASSIC) "كلمة جديدة" else "اللعب الحر",
+            banner = when (state.mode) {
+                GameState.MODE_DAILY -> {
+                    val st = progress.dailyStreak(today())
+                    "📅 تحدي اليوم ${com.khumasi.game.ui.ar(state.ref.toIntOrNull() ?: 0)}" +
+                        (if (st > 0) " · 🔥 سلسلة ${com.khumasi.game.ui.ar(st)}" else "") + " · التالي بعد ${nextDailyIn()}"
+                }
+                GameState.MODE_FRIEND -> "🤝 تحدي صديق — شارك نتيجتك معه"
+                else -> null
+            },
+            stats = if (state.mode == GameState.MODE_DAILY) progress.daily.copy(currentStreak = progress.dailyStreak(today())) else progress.unassisted,
         )
         sheets.show(panels.resultTitle(state), content, dismissible = true, maxHeightFraction = 0.64f) {
             // Closing the result brings the board back so the player can look at their guesses.
@@ -613,6 +852,10 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
             onClear = { ai.vault.clear() },
             onModel = { ai.model = it },
         )))
+        val last = getSharedPreferences("khumasi_meta", MODE_PRIVATE).getLong("last_backup", 0L).takeIf { it > 0 }?.let {
+            java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM, java.util.Locale("ar")).format(java.util.Date(it))
+        }
+        view.addView(panels.backupSection(last, onExport = { exportBackup() }, onImport = { importBackup() }))
         sheets.show("الإعدادات", view) { if (needsRebuild) handler.postDelayed({ recreate() }, 150) }
     }
 
@@ -799,6 +1042,11 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         if (i.getBooleanExtra("demo_scroll_ai", false)) handler.postDelayed({
             (sheets.findViewWithTag<View>("sheet_scroll") as? android.widget.ScrollView)?.fullScroll(View.FOCUS_DOWN)
         }, 1500)
+        if (i.getBooleanExtra("demo_modes", false)) handler.postDelayed({ showModes() }, 800)
+        if (i.getBooleanExtra("demo_daily", false)) handler.postDelayed({ switchTo(GameState.MODE_DAILY) }, 800)
+        if (i.getBooleanExtra("demo_friend_create", false)) handler.postDelayed({ showFriendCreate() }, 800)
+        i.getStringExtra("demo_friend_word")?.let { w -> handler.postDelayed({ showFriendEnter("تحدّيتك! الرمز: " + FriendCode.encode(ArabicNormalizer.normalize(w), 9)) }, 800) }
+        if (i.getBooleanExtra("demo_friend_start", false)) handler.postDelayed({ startFriend(FriendCode.encode("مكتبة", 9)) }, 800)
         if (i.getBooleanExtra("demo_tutorial", false)) handler.postDelayed({ showTutorial() }, 600)
         if (i.getBooleanExtra("demo_result", false) && state.isOver) handler.postDelayed({ showResult(levelUp = false) }, 900)
         if (state.isOver && !i.getBooleanExtra("demo_result", false)) updateRoundUi()

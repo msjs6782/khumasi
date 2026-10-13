@@ -18,6 +18,7 @@ object SaveCodec {
             "status" to s.status.name,
             "max" to s.maxAttempts.toString(),
             "mode" to s.mode,
+            "ref" to s.ref,
             "help" to if (s.usedHelp) "1" else "0",
             "hard" to if (s.hardMode) "1" else "0",
             "hints" to s.hintsUsed.toString(),
@@ -51,6 +52,7 @@ object SaveCodec {
                 status = status,
                 maxAttempts = max,
                 mode = m["mode"] ?: GameState.MODE_CLASSIC,
+                ref = m["ref"].orEmpty(),
                 usedHelp = m["help"] == "1",
                 hardMode = m["hard"] == "1",
                 hintsUsed = m["hints"]?.toIntOrNull()?.coerceIn(0, 3) ?: 0,
@@ -68,6 +70,9 @@ object SaveCodec {
             "discovered" to p.discovered.sorted().joinToString(","),
             "recent" to p.recentAnswers.joinToString(","),
             "bestMs" to p.bestWinMs.toString(),
+            "d" to encodeStats(p.daily),
+            "lastDaily" to p.lastDailyDay.toString(),
+            "friend" to "${p.friendPlayed};${p.friendWins}",
         )
     )
 
@@ -83,6 +88,10 @@ object SaveCodec {
                 discovered = m["discovered"].orEmpty().split(',').filter { ArabicNormalizer.isClean(it) }.toSet(),
                 recentAnswers = m["recent"].orEmpty().split(',').filter { ArabicNormalizer.isClean(it) },
                 bestWinMs = m["bestMs"]?.toLongOrNull()?.coerceAtLeast(0) ?: 0L,
+                daily = decodeStats(m["d"]),
+                lastDailyDay = m["lastDaily"]?.toIntOrNull() ?: 0,
+                friendPlayed = m["friend"]?.substringBefore(';')?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
+                friendWins = m["friend"]?.substringAfter(';', "")?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
             )
         }.getOrNull()
     }

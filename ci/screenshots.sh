@@ -80,6 +80,19 @@ sleep 2
 shot 29_ai_settings 6 --es demo_answer "مدرسة" --ez demo_settings true --ez demo_scroll_ai true
 shot 30_hint_offline 8 --es demo_answer "مدرسة" --es demo_guesses "مكتبة" --ez demo_hint true
 
+# Phase 4: play modes, daily challenge, friend challenge, backup.
+shot 31_modes 7 --es demo_answer "مدرسة" --ei demo_wins 6 --ez demo_modes true
+shot 32_daily 9 --es demo_answer "مدرسة" --ei demo_wins 6 --ez demo_daily true
+shot 33_friend_create 7 --es demo_answer "مدرسة" --ez demo_friend_create true
+shot 34_friend_enter 7 --es demo_answer "مدرسة" --es demo_friend_word "مكتبة"
+shot 35_friend_round 9 --es demo_answer "مدرسة" --ez demo_friend_start true
+# Sharing a challenge message to the app (as from a chat app) opens it ready to play.
+adb shell am force-stop "$PKG"
+adb shell am start -W -a android.intent.action.SEND -t text/plain --es android.intent.extra.TEXT "تحديتك! الرمز: KH-TEST" -n "$PKG/$ACT" >/dev/null
+sleep 6
+adb exec-out screencap -p > "$OUT/36_shared_bad_code.png"
+echo "captured 36_shared_bad_code"
+
 # A short 16:9 phone (360x640 dp): the board and keyboard must fit without clipping.
 adb shell wm size 1080x1920
 adb shell wm density 480
