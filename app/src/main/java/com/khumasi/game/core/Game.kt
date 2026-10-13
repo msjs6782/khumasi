@@ -22,6 +22,10 @@ data class GameState(
     val hardMode: Boolean = false,
     /** Hints revealed this round (0-3). Any hint marks the round as assisted. */
     val hintsUsed: Int = 0,
+    /** Positions revealed with the 🔦 power-up. */
+    val revealed: Set<Int> = emptySet(),
+    /** Letters removed from the keyboard with the 🧹 power-up (all absent from the answer). */
+    val eliminated: Set<Char> = emptySet(),
     /** Active play time, counted only while the game screen is visible. */
     val playedMs: Long = 0L,
     val startedAtEpochMs: Long = 0L,
@@ -35,7 +39,15 @@ data class GameState(
     }
 
     val keyboard: Map<Char, LetterState> by lazy(LazyThreadSafetyMode.NONE) {
-        KeyboardStates.fromGuesses(guesses, answer)
+        val map = HashMap(KeyboardStates.fromGuesses(guesses, answer))
+        for (ch in eliminated) if ((map[ch] ?: LetterState.UNKNOWN) == LetterState.UNKNOWN) map[ch] = LetterState.ABSENT
+        for (i in revealed) if (i in answer.indices) map[answer[i]] = LetterState.CORRECT
+        map
+    }
+
+    /** What the player knows of each position: from green tiles or a revealed letter, else null. */
+    val knownLetters: List<Char?> get() = answer.indices.map { i ->
+        if (i in revealed || guesses.any { it[i] == answer[i] }) answer[i] else null
     }
 
     fun type(letter: Char): GameState {
@@ -70,6 +82,12 @@ data class GameState(
 
     fun withHint(): GameState = if (isOver) this else copy(usedHelp = true, hintsUsed = hintsUsed + 1)
 
+    fun withReveal(position: Int): GameState =
+        if (isOver || position !in answer.indices) this else copy(usedHelp = true, revealed = revealed + position)
+
+    fun withEliminated(letters: Set<Char>): GameState =
+        if (isOver || letters.isEmpty()) this else copy(usedHelp = true, eliminated = eliminated + letters.filter { it !in answer })
+
     fun addPlayTime(ms: Long): GameState = if (isOver || ms <= 0) this else copy(playedMs = playedMs + ms)
 
     companion object {
@@ -77,6 +95,7 @@ data class GameState(
         const val MODE_CLASSIC = "classic"
         const val MODE_DAILY = "daily"
         const val MODE_FRIEND = "friend"
+        const val MODE_RUSH = "rush"
     }
 }
 

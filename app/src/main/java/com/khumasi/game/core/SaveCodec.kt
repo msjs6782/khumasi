@@ -22,6 +22,8 @@ object SaveCodec {
             "help" to if (s.usedHelp) "1" else "0",
             "hard" to if (s.hardMode) "1" else "0",
             "hints" to s.hintsUsed.toString(),
+            "rev" to s.revealed.sorted().joinToString(","),
+            "elim" to s.eliminated.sorted().joinToString(""),
             "playedMs" to s.playedMs.toString(),
             "startedAt" to s.startedAtEpochMs.toString(),
         )
@@ -56,6 +58,8 @@ object SaveCodec {
                 usedHelp = m["help"] == "1",
                 hardMode = m["hard"] == "1",
                 hintsUsed = m["hints"]?.toIntOrNull()?.coerceIn(0, 3) ?: 0,
+                revealed = m["rev"].orEmpty().split(',').mapNotNull { it.toIntOrNull() }.filter { it in answer.indices }.toSet(),
+                eliminated = m["elim"].orEmpty().filter { ArabicNormalizer.isGameLetter(it) && it !in answer }.toSet(),
                 playedMs = m["playedMs"]?.toLongOrNull() ?: 0L,
                 startedAtEpochMs = m["startedAt"]?.toLongOrNull() ?: 0L,
             )
@@ -73,6 +77,9 @@ object SaveCodec {
             "d" to encodeStats(p.daily),
             "lastDaily" to p.lastDailyDay.toString(),
             "friend" to "${p.friendPlayed};${p.friendWins}",
+            "shells" to "${p.shells};${p.shellsEarned}",
+            "badges" to p.badges.sorted().joinToString(","),
+            "rush" to "${p.bestRush};${p.rushPlayed}",
         )
     )
 
@@ -92,8 +99,18 @@ object SaveCodec {
                 lastDailyDay = m["lastDaily"]?.toIntOrNull() ?: 0,
                 friendPlayed = m["friend"]?.substringBefore(';')?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
                 friendWins = m["friend"]?.substringAfter(';', "")?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
+                shells = pair(m["shells"]).first,
+                shellsEarned = pair(m["shells"]).second,
+                badges = m["badges"].orEmpty().split(',').filter { it.isNotBlank() }.toSet(),
+                bestRush = pair(m["rush"]).first,
+                rushPlayed = pair(m["rush"]).second,
             )
         }.getOrNull()
+    }
+
+    private fun pair(text: String?): Pair<Int, Int> {
+        val p = text.orEmpty().split(';')
+        return (p.getOrNull(0)?.toIntOrNull()?.coerceAtLeast(0) ?: 0) to (p.getOrNull(1)?.toIntOrNull()?.coerceAtLeast(0) ?: 0)
     }
 
     private fun encodeStats(s: Stats): String =

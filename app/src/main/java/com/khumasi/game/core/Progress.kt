@@ -51,7 +51,25 @@ data class Progress(
     val lastDailyDay: Int = 0,
     val friendPlayed: Int = 0,
     val friendWins: Int = 0,
+    /** 🐚 shells to spend on power-ups, and all ever earned (for a badge). */
+    val shells: Int = 0,
+    val shellsEarned: Int = 0,
+    val badges: Set<String> = emptySet(),
+    /** Most words solved in one race against the clock. */
+    val bestRush: Int = 0,
+    val rushPlayed: Int = 0,
 ) {
+    fun earn(n: Int): Progress = if (n <= 0) this else copy(shells = shells + n, shellsEarned = shellsEarned + n)
+
+    /** Null when there are not enough shells. */
+    fun spend(n: Int): Progress? = if (n > shells) null else copy(shells = shells - n)
+
+    fun recordRush(solved: List<String>): Progress = copy(
+        bestRush = maxOf(bestRush, solved.size),
+        rushPlayed = rushPlayed + 1,
+        discovered = discovered + solved,
+    )
+
     val totalWins: Int get() = unassisted.wins + assisted.wins + daily.wins + friendWins
     val islandLevel: Int get() = Island.levelFor(totalWins)
 

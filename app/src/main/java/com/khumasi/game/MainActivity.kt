@@ -29,7 +29,12 @@ import com.khumasi.game.ai.GeminiClient
 import com.khumasi.game.ai.KeyVault
 import com.khumasi.game.audio.SoundFx
 import com.khumasi.game.core.ArabicNormalizer
+import com.khumasi.game.core.Achievements
+import com.khumasi.game.core.Badge
 import com.khumasi.game.core.Daily
+import com.khumasi.game.core.PowerUps
+import com.khumasi.game.core.Rush
+import com.khumasi.game.core.Shells
 import com.khumasi.game.core.FriendCode
 import com.khumasi.game.core.LetterState
 import com.khumasi.game.core.Reward
@@ -87,6 +92,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     private lateinit var skipLayer: View
     private lateinit var timerView: TextView
     private lateinit var modeView: TextView
+    private lateinit var knownView: TextView
     private lateinit var nextBtn: TextView
     private lateinit var sfx: SoundFx
     private lateinit var ai: AiHelper
@@ -102,6 +108,11 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     private var pendingLevelUp = false
     private var pendingRewards: List<Reward> = emptyList()
     private var refreshingRewards = false
+    private var pendingShells = 0
+    private var pendingBadges: List<Badge> = emptyList()
+    private var rushEnded = false
+    private var rushLast = 0L
+    private var lastRushSummary: (() -> Unit)? = null
     private var inputLockedUntil = 0L
     private var resumedAt = 0L
     private var lastRegion = floatArrayOf(0f, 0f, 0f, 0f)
@@ -191,6 +202,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         when (store.activeMode) {
             GameState.MODE_DAILY -> store.loadGame(GameState.MODE_DAILY)?.takeIf { it.ref == today().toString() }?.let { return it }
             GameState.MODE_FRIEND -> store.loadGame(GameState.MODE_FRIEND)?.let { return it }
+            GameState.MODE_RUSH -> store.loadGame(GameState.MODE_RUSH)?.takeIf { !it.isOver && !Rush.decode(it.ref).isOver }?.let { return it }
         }
         return store.loadGame(GameState.MODE_CLASSIC)?.takeIf { it.mode == GameState.MODE_CLASSIC }
             ?: newRound().also { store.saveRound(it, progress) }
@@ -236,11 +248,16 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
             setShadowLayer(dp(4f), 0f, dp(1f), 0x99000000.toInt())
             alpha = 0.92f
         }
+        knownView = label("", 15f, fonts.heavy, Color.WHITE).apply {
+            setShadowLayer(dp(4f), 0f, dp(1f), 0x99000000.toInt())
+            visibility = View.GONE
+        }
         val titleBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             addView(title)
             addView(modeView)
+            addView(knownView)
             addView(timerView)
             contentDescription = "أنماط اللعب: تحدي اليوم، اللعب الحر، تحدي صديق"
             isClickable = true
@@ -248,7 +265,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         }
         val islandBtn = IconView(this, IconView.Kind.ISLAND, "الجزيرة والمكافآت").apply { setOnClickListener { showRewards() } }
         val statsBtn = IconView(this, IconView.Kind.STATS, "الإحصاءات").apply { setOnClickListener { showStats() } }
-        val hintBtn = IconView(this, IconView.Kind.HINT, "تلميح").apply { setOnClickListener { showHints() } }
+        val hintBtn = IconView(this, IconView.Kind.HINT, "مساعدة وتلميحات").apply { setOnClickListener { showHelp() } }
         val settingsBtn = IconView(this, IconView.Kind.SETTINGS, "الإعدادات").apply { setOnClickListener { showSettings() } }
         header.addView(help, LinearLayout.LayoutParams(dpi(48f), dpi(48f)))
         header.addView(islandBtn, LinearLayout.LayoutParams(dpi(48f), dpi(48f)))
@@ -385,6 +402,9 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         sfx.onResume()
         handler.removeCallbacks(tickTimer)
         handler.post(tickTimer)
+        rushLast = 0L
+        handler.removeCallbacks(rushTick)
+        handler.post(rushTick)
     }
 
     override fun onPause() {
@@ -392,6 +412,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         store.saveGame(state)
         sfx.onPause()
         handler.removeCallbacks(tickTimer)
+        handler.removeCallbacks(rushTick)
         surface?.onPause()
         super.onPause()
     }
@@ -481,7 +502,12 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
                 playRevealSounds(result.evaluation, reveal, won, state.status == GameStatus.LOST)
                 board2d.show(state)
                 handler.postDelayed({ updateKeyboard() }, reveal)
-                if (state.isOver) onRoundOver(levelBefore, reveal) else store.saveGame(state)
+                when {
+                    state.mode == GameState.MODE_RUSH && state.isOver -> onRushWord(won, reveal)
+                    state.isOver -> onRoundOver(levelBefore, reveal)
+                    else -> store.saveGame(state)
+                }
+                updateKnown()
             }
         }
     }
@@ -512,6 +538,10 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
 
     private fun onRoundOver(levelBefore: Int, revealMs: Long) {
         progress = progress.recordRound(state)
+        pendingShells = Shells.forRound(state, progress)
+        progress = progress.earn(pendingShells)
+        pendingBadges = Achievements.newlyEarned(progress, state)
+        progress = Achievements.grant(progress, pendingBadges)
         store.saveRound(state, progress)
         val levelUp = progress.islandLevel > levelBefore
         pendingRewards = Rewards.newlyUnlocked(levelBefore, progress.islandLevel)
@@ -543,11 +573,15 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         updateKeyboard()
         updateRoundUi()
         showResult(pendingLevelUp)
+        if (pendingBadges.isNotEmpty() && !pendingLevelUp) handler.postDelayed({ sfx.play(SoundFx.Fx.LEVEL_UP, 0.55f) }, 500)
         pendingLevelUp = false
         pendingRewards = emptyList()
+        pendingShells = 0
+        pendingBadges = emptyList()
     }
 
     private fun startNewRound() {
+        if (state.mode == GameState.MODE_RUSH) { startRush(); return }
         if (state.mode != GameState.MODE_CLASSIC) { switchTo(GameState.MODE_CLASSIC); return }
         sheets.close()
         surface?.send { setWorldView(false) }
@@ -590,11 +624,15 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
                 dailyRound(day)
             }
             GameState.MODE_FRIEND -> friendRound ?: store.loadGame(GameState.MODE_FRIEND) ?: return
+            GameState.MODE_RUSH -> store.loadGame(GameState.MODE_RUSH)?.takeIf { !it.isOver && !Rush.decode(it.ref).isOver }
+                ?: newRushRound(Rush.Session())
             else -> store.loadGame(GameState.MODE_CLASSIC)?.takeIf { !it.isOver } ?: newRound()
         }
         pendingResult?.let { handler.removeCallbacks(it) }
         pendingResult = null
         skipLayer.visibility = View.GONE
+        rushEnded = false
+        rushLast = 0L
         accumulatePlayTime()
         store.saveGame(state)
         sheets.close()
@@ -607,6 +645,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         if (state.isOver) handler.postDelayed({ showResult(levelUp = false) }, 450)
         else if (mode == GameState.MODE_DAILY) showToast("تحدي اليوم ${com.khumasi.game.ui.ar(today())} — بالتوفيق!")
         else if (mode == GameState.MODE_FRIEND && friendRound != null) showToast("تحدي صديق — خمّن كلمته!")
+        else if (mode == GameState.MODE_RUSH) showToast("⏱️ انطلق! كل كلمة تحلها تضيف ٢٠ ثانية")
     }
 
     private fun updateModeLabel() {
@@ -615,9 +654,19 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         modeView.text = when (state.mode) {
             GameState.MODE_DAILY -> "📅 تحدي اليوم ${com.khumasi.game.ui.ar(state.ref.toIntOrNull() ?: 0)} ▾"
             GameState.MODE_FRIEND -> "🤝 تحدي صديق ▾"
+            GameState.MODE_RUSH -> {
+                val r = Rush.decode(state.ref)
+                val sec = ((r.remainingMs + 999) / 1000).toInt()
+                "⏱️ ${com.khumasi.game.ui.ar(sec / 60)}:${com.khumasi.game.ui.ar(sec % 60).padStart(2, '٠')} · ✓ ${com.khumasi.game.ui.ar(r.score)} ▾"
+            }
             else -> if (dailyOpen) "اللعب الحر · تحدي اليوم متاح ▾" else "اللعب الحر ▾"
         }
-        nextBtn.text = if (state.mode == GameState.MODE_CLASSIC) "كلمة جديدة" else "اللعب الحر"
+        modeView.setTextColor(if (state.mode == GameState.MODE_RUSH && Rush.decode(state.ref).remainingMs < 20_000) 0xFFFF8A80.toInt() else Color.WHITE)
+        nextBtn.text = when (state.mode) {
+            GameState.MODE_CLASSIC -> "كلمة جديدة"
+            GameState.MODE_RUSH -> "سباق جديد"
+            else -> "اللعب الحر"
+        }
     }
 
     private fun showModes() {
@@ -629,6 +678,9 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
             dailyStreak = progress.dailyStreak(day),
             nextDailyIn = nextDailyIn(),
             hasFriendRound = store.loadGame(GameState.MODE_FRIEND)?.let { !it.isOver } == true,
+            bestRush = progress.bestRush,
+            shells = progress.shells,
+            badges = progress.badges.size,
         )
         sheets.show("أنماط اللعب", panels.modes(info,
             onDaily = { if (state.mode == GameState.MODE_DAILY) { sheets.close(); if (state.isOver) handler.postDelayed({ showResult(false) }, 300) } else switchTo(GameState.MODE_DAILY) },
@@ -636,7 +688,9 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
             onFriendCreate = { showFriendCreate() },
             onFriendEnter = { showFriendEnter("") },
             onFriendResume = { switchTo(GameState.MODE_FRIEND) },
-        ), maxHeightFraction = 0.8f)
+            onRush = { if (state.mode == GameState.MODE_RUSH && !rushEnded) sheets.close() else startRush() },
+            onBadges = { showBadges() },
+        ), maxHeightFraction = 0.85f)
     }
 
     private fun showFriendCreate() {
@@ -752,10 +806,11 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     private fun updateKeyboard() = keyboard.setStates(state.keyboard)
 
     private fun updateRoundUi() {
-        val over = state.isOver && pendingResult == null
+        val over = state.isOver && pendingResult == null && (state.mode != GameState.MODE_RUSH || rushEnded)
         keyboard.visibility = if (over) View.INVISIBLE else View.VISIBLE
         resultBar.visibility = if (over) View.VISIBLE else View.GONE
         updateModeLabel()
+        updateKnown()
     }
 
     // ------------------------------------------------------------------ sheets
@@ -763,6 +818,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     private fun solutionFor(word: String): Solution? = solutions.firstOrNull { it.word == word }
 
     private fun showResult(levelUp: Boolean) {
+        if (state.mode == GameState.MODE_RUSH) { lastRushSummary?.invoke() ?: startRush(); return }
         if (!state.isOver) return
         // The board slides away so the island shows above the result.
         surface?.send { setWorldView(true) }
@@ -789,6 +845,9 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
                 GameState.MODE_FRIEND -> "🤝 تحدي صديق — شارك نتيجتك معه"
                 else -> null
             },
+            shellsEarned = pendingShells,
+            newBadges = pendingBadges,
+            onBadges = { showBadges() },
             stats = if (state.mode == GameState.MODE_DAILY) progress.daily.copy(currentStreak = progress.dailyStreak(today())) else progress.unassisted,
         )
         sheets.show(panels.resultTitle(state), content, dismissible = true, maxHeightFraction = 0.64f) {
@@ -800,7 +859,105 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
 
     private fun showRules() = sheets.show("كيف تلعب", panels.rules())
 
-    private fun showStats() = sheets.show("الإحصاءات", panels.stats(progress))
+    private fun showStats() {
+        val v = panels.stats(progress) as LinearLayout
+        v.addView(panels.button("🏅 الأوسمة (${com.khumasi.game.ui.ar(progress.badges.size)} من ${com.khumasi.game.ui.ar(Achievements.ALL.size)})", primary = false) { showBadges() },
+            LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dpi(16f) })
+        sheets.show("الإحصاءات", v)
+    }
+
+    private fun showBadges() = sheets.show("الأوسمة", panels.badges(progress), maxHeightFraction = 0.85f) {
+        if (state.isOver) surface?.send { setWorldView(false) }
+        updateRoundUi()
+    }
+
+    // ------------------------------------------------------------------ race against the clock
+
+    private fun newRushRound(session: Rush.Session): GameState {
+        val reported = store.reportedWords
+        val pool = solutions.filter { it.word !in reported }.ifEmpty { solutions }
+        val pick = SolutionPicker.pick(pool, progress)
+        progress = progress.rememberAnswer(pick.word, pool.size)
+        return GameState(answer = pick.word, mode = GameState.MODE_RUSH, ref = session.encode(), startedAtEpochMs = System.currentTimeMillis())
+    }
+
+    private fun startRush() {
+        if (state.mode == GameState.MODE_RUSH) {
+            // Close the finished race so switchTo starts a new one.
+            state = state.copy(ref = Rush.decode(state.ref).copy(remainingMs = 0).encode())
+            store.saveGame(state)
+        }
+        lastRushSummary = null
+        switchTo(GameState.MODE_RUSH)
+    }
+
+    /** Time runs only while the race is on screen and the app is open. */
+    private val rushTick = object : Runnable {
+        override fun run() {
+            if (state.mode == GameState.MODE_RUSH && !rushEnded) {
+                val now = SystemClock.uptimeMillis()
+                val dt = if (rushLast == 0L) 0L else now - rushLast
+                rushLast = now
+                if (dt in 1..2000) {
+                    val r = Rush.decode(state.ref).tick(dt)
+                    state = state.copy(ref = r.encode())
+                    if (r.isOver) endRush()
+                }
+                updateModeLabel()
+            } else rushLast = 0L
+            handler.postDelayed(this, 200)
+        }
+    }
+
+    private fun onRushWord(won: Boolean, revealMs: Long) {
+        var r = Rush.decode(state.ref)
+        if (won) {
+            r = r.solvedWord(state.answer)
+            progress = progress.earn(1)
+            handler.postDelayed({ showToast("✓ +٢٠ ثانية") }, revealMs)
+        } else {
+            val shown = solutionFor(state.answer)?.display ?: state.answer
+            handler.postDelayed({ showToast("الكلمة كانت «$shown»") }, revealMs)
+        }
+        state = state.copy(ref = r.encode())
+        store.saveRound(state, progress)
+        val answer = state.answer
+        handler.postDelayed({
+            if (state.mode == GameState.MODE_RUSH && !rushEnded && state.answer == answer) {
+                state = newRushRound(Rush.decode(state.ref))
+                store.saveRound(state, progress)
+                syncBoard(animate = true)
+                updateKeyboard()
+                updateRoundUi()
+            }
+        }, revealMs + if (won) 900L else 1800L)
+    }
+
+    private fun endRush() {
+        rushEnded = true
+        inputLockedUntil = SystemClock.uptimeMillis() + 600
+        val r = Rush.decode(state.ref)
+        val before = progress.bestRush
+        progress = progress.recordRush(r.solved)
+        val bonus = Shells.forRushEnd(r.score)
+        progress = progress.earn(bonus)
+        val badges = Achievements.newlyEarned(progress, null)
+        progress = Achievements.grant(progress, badges)
+        state = state.copy(status = GameStatus.LOST, input = "")
+        store.saveRound(state, progress)
+        sfx.play(if (r.score > before && r.score > 0) SoundFx.Fx.LEVEL_UP else SoundFx.Fx.WIN, 0.6f)
+        val words = r.solved.map { solutionFor(it)?.display ?: it }
+        val summary = {
+            sheets.show("انتهى الوقت!", panels.rushSummary(r.score, progress.bestRush, r.score > before && r.score > 0, r.score + bonus, words, badges,
+                onAgain = { startRush() }, onClassic = { switchTo(GameState.MODE_CLASSIC) }, onBadges = { showBadges() }),
+                maxHeightFraction = 0.75f) { updateRoundUi() }
+        }
+        lastRushSummary = { sheets.show("نتيجة السباق", panels.rushSummary(r.score, progress.bestRush, false, 0, words, emptyList(),
+            onAgain = { startRush() }, onClassic = { switchTo(GameState.MODE_CLASSIC) }, onBadges = { showBadges() }), maxHeightFraction = 0.75f) { updateRoundUi() } }
+        updateKeyboard()
+        updateRoundUi()
+        summary()
+    }
 
     private fun showSettings() {
         val s = Panels.SettingsState(
@@ -901,12 +1058,71 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
 
     // ------------------------------------------------------------------ hints and AI
 
-    private fun showHints() {
-        if (state.isOver) { showToast("التلميحات متاحة أثناء الجولة"); return }
+    private fun showHelp() {
+        if (state.isOver) { showToast("المساعدة متاحة أثناء الجولة"); return }
         val sol = solutionFor(state.answer)
         val hints = (1..state.hintsUsed).map { ai.revealedHint(it, state, sol) }
-        val (view, _) = panels.hintSheet(hints, state.hintsUsed < AiHelper.MAX_HINTS, state.usedHelp) { requestHint() }
-        sheets.show("تلميح", view, maxHeightFraction = 0.6f)
+        val pos = PowerUps.revealPosition(state)
+        val wrong = PowerUps.lettersToEliminate(state)
+        val shells = progress.shells
+        val revealNote = when {
+            state.revealed.size >= Shells.MAX_REVEALS -> "استخدمته مرتين في هذه الجولة"
+            pos == null -> "تعرف كل الحروف"
+            shells < Shells.REVEAL_COST -> "تحتاج ${com.khumasi.game.ui.ar(Shells.REVEAL_COST)} أصداف"
+            else -> null
+        }
+        val eliminateNote = when {
+            state.eliminated.isNotEmpty() -> "استخدمته في هذه الجولة"
+            wrong.isEmpty() -> "لا توجد حروف خاطئة متبقية"
+            shells < Shells.ELIMINATE_COST -> "تحتاج ${com.khumasi.game.ui.ar(Shells.ELIMINATE_COST)} أصداف"
+            else -> null
+        }
+        val info = Panels.HelpInfo(
+            shells = shells,
+            canReveal = revealNote == null,
+            canEliminate = eliminateNote == null,
+            revealNote = revealNote,
+            eliminateNote = eliminateNote,
+            hints = hints,
+            canAskMore = state.hintsUsed < AiHelper.MAX_HINTS,
+            hintsAllowed = state.mode != GameState.MODE_RUSH,
+            assisted = state.usedHelp,
+        )
+        sheets.show("مساعدة", panels.helpSheet(info, onReveal = { buyReveal() }, onEliminate = { buyEliminate() }, onMore = { requestHint() }), maxHeightFraction = 0.8f)
+    }
+
+    private fun buyReveal() {
+        val pos = PowerUps.revealPosition(state) ?: return
+        val paid = progress.spend(Shells.REVEAL_COST) ?: return
+        progress = paid
+        state = state.withReveal(pos)
+        store.saveRound(state, progress)
+        sheets.close()
+        updateKeyboard()
+        updateKnown()
+        sfx.play(SoundFx.Fx.CORRECT, 0.6f)
+        showToast("🔦 الحرف ${ORDINALS.getOrElse(pos) { "" }}: «${state.answer[pos]}»")
+    }
+
+    private fun buyEliminate() {
+        val letters = PowerUps.lettersToEliminate(state)
+        if (letters.isEmpty()) return
+        val paid = progress.spend(Shells.ELIMINATE_COST) ?: return
+        progress = paid
+        state = state.withEliminated(letters)
+        store.saveRound(state, progress)
+        sheets.close()
+        updateKeyboard()
+        sfx.play(SoundFx.Fx.ABSENT, 0.6f)
+        showToast("🧹 أُطفئت ${com.khumasi.game.ui.ar(letters.size)} حروف: ${letters.joinToString(" ")}")
+    }
+
+    /** The letters known so far (greens and revealed ones), shown under the title after a 🔦. */
+    private fun updateKnown() {
+        if (!::knownView.isInitialized) return
+        if (state.revealed.isEmpty() || state.isOver) { knownView.visibility = View.GONE; return }
+        knownView.text = "🔦 " + state.knownLetters.joinToString("  ") { it?.toString() ?: "؟" }
+        knownView.visibility = View.VISIBLE
     }
 
     private fun requestHint() {
@@ -1005,6 +1221,9 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         i.getStringExtra("demo_tiles")?.let { store.tileTheme = it }
         if (i.hasExtra("demo_hard")) store.hardMode = i.getBooleanExtra("demo_hard", false)
         if (i.hasExtra("demo_timer")) store.showTimer = i.getBooleanExtra("demo_timer", false)
+        if (i.hasExtra("demo_shells")) progress = progress.copy(shells = i.getIntExtra("demo_shells", 0))
+        val haveBadges = i.getIntExtra("demo_badge_count", 0)
+        if (haveBadges > 0) progress = progress.copy(badges = Achievements.ALL.take(haveBadges).map { it.id }.toSet())
         val wins = i.getIntExtra("demo_wins", -1)
         if (wins >= 0) progress = progress.copy(unassisted = Stats(played = wins + wins / 4, wins = wins, currentStreak = minOf(wins, 3), bestStreak = minOf(wins, 6)))
         val answer = i.getStringExtra("demo_answer")?.let { ArabicNormalizer.normalize(it) }
@@ -1016,7 +1235,13 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
                 s = (s.submit { true } as? SubmitResult.Accepted)?.state ?: s
             }
             i.getStringExtra("demo_input")?.let { inp -> s = ArabicNormalizer.normalize(inp).fold(s) { acc, c -> acc.type(c) } }
-            if (s.isOver) progress = progress.recordRound(s)
+            if (s.isOver) {
+                progress = progress.recordRound(s)
+                pendingShells = Shells.forRound(s, progress)
+                progress = progress.earn(pendingShells)
+                pendingBadges = Achievements.newlyEarned(progress, s)
+                progress = Achievements.grant(progress, pendingBadges)
+            }
             state = s
         }
         store.saveRound(state, progress)
@@ -1042,6 +1267,14 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         if (i.getBooleanExtra("demo_scroll_ai", false)) handler.postDelayed({
             (sheets.findViewWithTag<View>("sheet_scroll") as? android.widget.ScrollView)?.fullScroll(View.FOCUS_DOWN)
         }, 1500)
+        if (i.getBooleanExtra("demo_help", false)) handler.postDelayed({ showHelp() }, 800)
+        if (i.getBooleanExtra("demo_reveal", false)) handler.postDelayed({ buyReveal(); buyEliminate() }, 800)
+        if (i.getBooleanExtra("demo_badges", false)) handler.postDelayed({ showBadges() }, 800)
+        if (i.getBooleanExtra("demo_rush", false)) handler.postDelayed({ startRush() }, 800)
+        if (i.hasExtra("demo_rush_end")) handler.postDelayed({
+            startRush()
+            state = state.copy(ref = Rush.Session(score = 4, remainingMs = 1500, solved = listOf("مكتبة", "سيارة", "حديقة", "جزيرة")).encode())
+        }, 800)
         if (i.getBooleanExtra("demo_modes", false)) handler.postDelayed({ showModes() }, 800)
         if (i.getBooleanExtra("demo_daily", false)) handler.postDelayed({ switchTo(GameState.MODE_DAILY) }, 800)
         if (i.getBooleanExtra("demo_friend_create", false)) handler.postDelayed({ showFriendCreate() }, 800)
@@ -1057,5 +1290,6 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     companion object {
         private const val TAG = "Khumasi"
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
+        private val ORDINALS = listOf("الأول", "الثاني", "الثالث", "الرابع", "الخامس", "السادس", "السابع")
     }
 }

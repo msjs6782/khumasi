@@ -8,7 +8,10 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
+import com.khumasi.game.core.Achievements
+import com.khumasi.game.core.Badge
 import com.khumasi.game.core.GameState
+import com.khumasi.game.core.Shells
 import com.khumasi.game.core.GameStatus
 import com.khumasi.game.core.Island
 import com.khumasi.game.core.LetterState
@@ -184,6 +187,9 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
             addSpaced(text("تحدي اليوم", 17f, bold = true), 18f)
             addSpaced(numbers(progress.daily.copy(currentStreak = progress.dailyStreak(todayDaily))), 6f)
         }
+        if (progress.rushPlayed > 0) {
+            addSpaced(text("⏱️ سباق الوقت: أفضل نتيجة ${ar(progress.bestRush)} كلمات في ${ar(progress.rushPlayed)} سباقًا", 14f, color = UiColors.MUTED), 10f)
+        }
         if (progress.friendPlayed > 0) {
             addSpaced(text("تحديات الأصدقاء: لعبت ${ar(progress.friendPlayed)}، فزت ${ar(progress.friendWins)}", 14f, color = UiColors.MUTED), 10f)
         }
@@ -250,6 +256,9 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
         nextLabel: String = "كلمة جديدة",
         banner: String? = null,
         stats: Stats = progress.unassisted,
+        shellsEarned: Int = 0,
+        newBadges: List<Badge> = emptyList(),
+        onBadges: () -> Unit = {},
     ): View = column().apply {
         val won = state.status == GameStatus.WON
         banner?.let {
@@ -293,6 +302,10 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
             setPadding(ctx.dpi(12f), ctx.dpi(7f), ctx.dpi(12f), ctx.dpi(7f))
             setOnClickListener { onIsland() }
         }, 12f)
+        if (shellsEarned > 0) {
+            addSpaced(text("🐚 +${ar(shellsEarned)} صدفة — لديك ${ar(progress.shells)}", 14f, bold = true, color = opaque(Palette.PRESENT)), 8f)
+        }
+        for (b in newBadges) addSpaced(badgeBanner(b, onBadges), 8f)
         for (r in newRewards) {
             val kind = if (r.kind == Reward.Kind.TILES) "سمة قطع جديدة" else "سماء جديدة"
             addSpaced(text("🎁 $kind: «${r.name}» — اخترها من المكافآت", 14f, bold = true, color = opaque(Palette.PRESENT)), 6f)
@@ -525,6 +538,9 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
         val dailyStreak: Int,
         val nextDailyIn: String,
         val hasFriendRound: Boolean,
+        val bestRush: Int = 0,
+        val shells: Int = 0,
+        val badges: Int = 0,
     )
 
     private fun card(title: String, subtitle: String, selected: Boolean): LinearLayout = column().apply {
@@ -542,7 +558,16 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
         onFriendCreate: () -> Unit,
         onFriendEnter: () -> Unit,
         onFriendResume: () -> Unit,
+        onRush: () -> Unit = {},
+        onBadges: () -> Unit = {},
     ): View = column().apply {
+        val top = row()
+        top.addView(text("🐚 ${ar(info.shells)} صدفة", 15f, bold = true, color = opaque(Palette.PRESENT)), LinearLayout.LayoutParams(0, wrap, 1f))
+        top.addView(text("🏅 الأوسمة ${ar(info.badges)}/${ar(Achievements.ALL.size)}  ‹", 15f, bold = true, color = UiColors.ACCENT).apply {
+            setPadding(ctx.dpi(8f), ctx.dpi(6f), 0, ctx.dpi(6f))
+            setOnClickListener { onBadges() }
+        })
+        addSpaced(top, 0f)
         val streak = if (info.dailyStreak > 0) "   🔥 ${ar(info.dailyStreak)}" else ""
         val daily = card("📅 تحدي اليوم ${ar(info.dailyNumber)}$streak",
             if (info.dailyDone) "أنهيت تحدي اليوم ✓ — التالي بعد ${info.nextDailyIn}"
@@ -554,6 +579,11 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
         val classic = card("🎲 اللعب الحر", "كلمات عشوائية بلا حدود، وتنمو جزيرتك مع كل فوز.", info.current == GameState.MODE_CLASSIC)
         if (info.current != GameState.MODE_CLASSIC) classic.addSpaced(button("العب", primary = false, onClick = onClassic), 10f)
         addSpaced(classic, 12f)
+
+        val rush = card("⏱️ سباق الوقت" + if (info.bestRush > 0) "   🏁 ${ar(info.bestRush)}" else "",
+            "ثلاث دقائق لتحل أكبر عدد من الكلمات، وكل كلمة تحلها تضيف ٢٠ ثانية.", info.current == GameState.MODE_RUSH)
+        rush.addSpaced(button(if (info.current == GameState.MODE_RUSH) "متابعة السباق" else "ابدأ السباق", primary = false, onClick = onRush), 10f)
+        addSpaced(rush, 12f)
 
         val friend = card("🤝 تحدي صديق", "اختر كلمة وأرسل رمزها لصديقك، أو الصق رمزًا وصلك.", info.current == GameState.MODE_FRIEND)
         val r = row()
@@ -630,6 +660,106 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
         val r = row()
         r.addView(button(yes, primary = true, onClick = onYes), LinearLayout.LayoutParams(0, wrap, 1f))
         r.addView(button("إلغاء", primary = false, onClick = onNo), LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = ctx.dpi(10f) })
+        addSpaced(r, 14f)
+    }
+
+    // -------------------------------------------------------------- fun update: shells, power-ups, race, badges
+
+    private fun badgeBanner(b: Badge, onClick: () -> Unit): View = row().apply {
+        background = rounded(Color.parseColor("#FF3A2E12"), ctx.dp(14f), opaque(Palette.PRESENT), ctx.dpi(1.5f))
+        setPadding(ctx.dpi(12f), ctx.dpi(8f), ctx.dpi(12f), ctx.dpi(8f))
+        addView(text(b.emoji, 28f, gravity = Gravity.CENTER))
+        val c = column()
+        c.addView(text("وسام جديد: ${b.title}", 16f, bold = true, color = opaque(Palette.PRESENT)))
+        c.addView(text("${b.description} · +${ar(b.shells)} 🐚", 13f, color = UiColors.MUTED))
+        addView(c, LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = ctx.dpi(10f) })
+        setOnClickListener { onClick() }
+    }
+
+    /** All badges: earned ones in color, the rest dimmed with how to get them. */
+    fun badges(progress: Progress): View = column().apply {
+        val have = progress.badges
+        addSpaced(text("حصلت على ${ar(have.size)} من ${ar(Achievements.ALL.size)} وسامًا", 15f, color = UiColors.MUTED), 0f)
+        for (pair in Achievements.ALL.chunked(2)) {
+            val r = row()
+            for ((i, b) in pair.withIndex()) {
+                val got = b.id in have
+                val cell = column().apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    background = rounded(if (got) Color.parseColor("#FF243656") else Color.parseColor("#FF161F33"), ctx.dp(16f),
+                        if (got) opaque(Palette.PRESENT) else UiColors.CARD_LINE, ctx.dpi(1f))
+                    setPadding(ctx.dpi(8f), ctx.dpi(10f), ctx.dpi(8f), ctx.dpi(10f))
+                    alpha = if (got) 1f else 0.55f
+                    addView(text(if (got) b.emoji else "🔒", 30f, gravity = Gravity.CENTER))
+                    addView(text(b.title, 15f, bold = true, gravity = Gravity.CENTER))
+                    addView(text(b.description, 12f, color = UiColors.MUTED, gravity = Gravity.CENTER))
+                }
+                r.addView(cell, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply { if (i > 0) marginStart = ctx.dpi(10f) })
+            }
+            if (pair.size == 1) r.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f).apply { marginStart = ctx.dpi(10f) })
+            addSpaced(r, 10f)
+        }
+    }
+
+    class HelpInfo(
+        val shells: Int,
+        val canReveal: Boolean,
+        val canEliminate: Boolean,
+        val revealNote: String?,
+        val eliminateNote: String?,
+        val hints: List<String>,
+        val canAskMore: Boolean,
+        val hintsAllowed: Boolean,
+        val assisted: Boolean,
+    )
+
+    private fun powerRow(emoji: String, title: String, desc: String, cost: Int, enabled: Boolean, note: String?, onBuy: () -> Unit): View = row().apply {
+        background = rounded(Color.parseColor("#FF1A2740"), ctx.dp(16f), UiColors.CARD_LINE, ctx.dpi(1f))
+        setPadding(ctx.dpi(12f), ctx.dpi(10f), ctx.dpi(12f), ctx.dpi(10f))
+        addView(text(emoji, 26f, gravity = Gravity.CENTER))
+        val c = column()
+        c.addView(text(title, 16f, bold = true))
+        c.addView(text(note ?: desc, 12f, color = UiColors.MUTED))
+        addView(c, LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = ctx.dpi(10f); marginEnd = ctx.dpi(8f) })
+        val buy = button("${ar(cost)} 🐚", primary = enabled) { if (enabled) onBuy() }.apply {
+            textSize = 15f
+            setPadding(ctx.dpi(14f), ctx.dpi(9f), ctx.dpi(14f), ctx.dpi(9f))
+            alpha = if (enabled) 1f else 0.45f
+        }
+        addView(buy)
+    }
+
+    /** The 💡 sheet: power-ups bought with shells, then the graded hints. */
+    fun helpSheet(h: HelpInfo, onReveal: () -> Unit, onEliminate: () -> Unit, onMore: () -> Unit): View = column().apply {
+        addSpaced(text("لديك ${ar(h.shells)} 🐚", 20f, bold = true, color = opaque(Palette.PRESENT)).apply { typeface = fonts.heavy }, 0f)
+        addSpaced(text("تكسب الأصداف بالفوز: كلما قلّت محاولاتك زادت. أي مساعدة تجعل الجولة «بمساعدة».", 13f, color = UiColors.MUTED), 4f)
+        addSpaced(powerRow("🔦", "كشف حرف", "يظهر حرف في مكانه الصحيح", Shells.REVEAL_COST, h.canReveal, h.revealNote, onReveal), 12f)
+        addSpaced(powerRow("🧹", "إزالة حروف خاطئة", "يُطفئ ${ar(Shells.ELIMINATE_COUNT)} حروف ليست في الكلمة", Shells.ELIMINATE_COST, h.canEliminate, h.eliminateNote, onEliminate), 8f)
+        if (!h.hintsAllowed) return@apply
+        addSpaced(text("تلميحات بالكلمات", 14f, bold = true, color = UiColors.ACCENT), 18f)
+        for ((i, t) in h.hints.withIndex()) {
+            addSpaced(text("التلميح ${ar(i + 1)}", 13f, bold = true, color = UiColors.MUTED), 8f)
+            addSpaced(text(t, 17f), 2f)
+        }
+        if (h.canAskMore) {
+            addSpaced(button(if (h.hints.isEmpty()) "اطلب تلميحًا (مجاني)" else "تلميح أقوى (${ar(h.hints.size + 1)} من ٣)", primary = false) { onMore() }, 10f)
+        } else if (h.hints.size >= 3) {
+            addSpaced(text("استخدمت التلميحات الثلاثة لهذه الجولة.", 13f, color = UiColors.MUTED), 10f)
+        }
+    }
+
+    fun rushSummary(score: Int, best: Int, newBest: Boolean, shells: Int, words: List<String>, newBadges: List<Badge>,
+                    onAgain: () -> Unit, onClassic: () -> Unit, onBadges: () -> Unit): View = column().apply {
+        addSpaced(text(ar(score), 64f, bold = true, gravity = Gravity.CENTER).apply { typeface = fonts.heavy }, 0f)
+        addSpaced(text(if (score == 1) "كلمة واحدة" else if (score == 2) "كلمتان" else "كلمات حللتها", 16f, color = UiColors.MUTED, gravity = Gravity.CENTER), 0f)
+        addSpaced(text(if (newBest) "🎉 رقم قياسي جديد!" else "أفضل نتيجة لك: ${ar(best)}", 17f, bold = true,
+            color = if (newBest) opaque(Palette.PRESENT) else UiColors.TEXT, gravity = Gravity.CENTER), 8f)
+        if (shells > 0) addSpaced(text("🐚 +${ar(shells)} صدفة", 14f, bold = true, color = opaque(Palette.PRESENT), gravity = Gravity.CENTER), 6f)
+        if (words.isNotEmpty()) addSpaced(text(words.joinToString(" · "), 15f, color = UiColors.MUTED, gravity = Gravity.CENTER), 8f)
+        for (b in newBadges) addSpaced(badgeBanner(b, onBadges), 8f)
+        val r = row()
+        r.addView(button("سباق جديد", primary = true, onClick = onAgain), LinearLayout.LayoutParams(0, wrap, 1.3f))
+        r.addView(button("اللعب الحر", primary = false, onClick = onClassic), LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = ctx.dpi(10f) })
         addSpaced(r, 14f)
     }
 

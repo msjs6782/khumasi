@@ -102,6 +102,14 @@ if [ -n "$CODE" ]; then
   echo "captured 37_shared_code"
 fi
 
+# Fun update: shells and power-ups, badges, race against the clock.
+shot 38_help 7 --es demo_answer "مدرسة" --es demo_guesses "مكتبة" --ei demo_shells 23 --ez demo_help true
+shot 39_powerups_used 8 --es demo_answer "مدرسة" --es demo_guesses "مكتبة" --ei demo_shells 23 --ez demo_reveal true
+shot 40_badges 7 --es demo_answer "مدرسة" --ei demo_badge_count 6 --ez demo_badges true
+shot 41_won_badges 9 --es demo_answer "مدرسة" --es demo_guesses "مدرسة" --ez demo_result true
+shot 42_rush 8 --es demo_answer "مدرسة" --ez demo_rush true
+shot 43_rush_end 10 --es demo_answer "مدرسة" --ez demo_rush_end true
+
 # A short 16:9 phone (360x640 dp): the board and keyboard must fit without clipping.
 adb shell wm size 1080x1920
 adb shell wm density 480

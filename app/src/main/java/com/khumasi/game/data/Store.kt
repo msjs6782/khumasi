@@ -23,6 +23,7 @@ class Store(context: Context) {
     private fun gameKey(mode: String) = when (mode) {
         GameState.MODE_DAILY -> "game_daily"
         GameState.MODE_FRIEND -> "game_friend"
+        GameState.MODE_RUSH -> "game_rush"
         else -> KEY_GAME
     }
 
