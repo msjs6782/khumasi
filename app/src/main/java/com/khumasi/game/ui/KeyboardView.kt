@@ -113,7 +113,7 @@ class KeyboardView(context: Context, private val fonts: Fonts) : View(context) {
             }
         }
         textPaint.textSize = min(keyH * 0.56f, letterW * 0.86f)
-        bubbleTextSize = min(keyH * 0.95f, letterW * 1.4f)
+        bubbleTextSize = min(keyH * 0.85f, letterW * 1.3f)
         iconPaint.strokeWidth = dp(2.2f)
     }
 
@@ -164,7 +164,7 @@ class KeyboardView(context: Context, private val fonts: Fonts) : View(context) {
 
     private fun drawBubble(canvas: Canvas, key: Key) {
         val r = key.rect
-        val w = r.width() * 1.55f
+        val w = r.width() * 1.75f
         val h = r.height() * 1.25f
         val cx = r.centerX().coerceIn(w / 2 + dp(2f), width - w / 2 - dp(2f))
         bubbleRect.set(cx - w / 2, r.top - h - dp(6f), cx + w / 2, r.top - dp(6f))
@@ -179,8 +179,12 @@ class KeyboardView(context: Context, private val fonts: Fonts) : View(context) {
         }
         canvas.drawRoundRect(bubbleRect, radius, radius, keyPaint)
         val old = textPaint.textSize
-        textPaint.textSize = bubbleTextSize
         textPaint.typeface = fonts.heavy
+        textPaint.textSize = bubbleTextSize
+        // Wide letters (ش ص ض س) shrink to fit inside the bubble.
+        val textW = textPaint.measureText(key.ch.toString())
+        val maxW = w * 0.8f
+        if (textW > maxW) textPaint.textSize = bubbleTextSize * maxW / textW
         textPaint.color = if (state == LetterState.CORRECT || state == LetterState.PRESENT) android.graphics.Color.WHITE else opaque(Palette.TILE_INK)
         drawCentered(canvas, key.ch.toString(), bubbleRect.centerX(), bubbleRect.centerY())
         textPaint.textSize = old
