@@ -13,11 +13,15 @@ adb shell input keyevent 82 >/dev/null 2>&1 || true
 adb install -r "$APK"
 # Android shows a one-time "Viewing full screen" hint for immersive apps; mark it as seen.
 adb shell settings put secure immersive_mode_confirmations confirmed
+# The emulator's own launcher sometimes stalls under load; hide system "not responding" dialogs.
+adb shell settings put global hide_error_dialogs 1
+adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
 adb logcat -c
 
 shot() {
   local name="$1"; local wait="$2"; shift 2
   adb shell am force-stop "$PKG"
+  adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
   adb shell am start -W -n "$PKG/$ACT" "$@" >/dev/null
   sleep "$wait"
   adb exec-out screencap -p > "$OUT/$name.png"
