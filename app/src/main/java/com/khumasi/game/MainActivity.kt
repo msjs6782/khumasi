@@ -202,6 +202,10 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         }
         keyboardPanel.addView(resultBar, FrameLayout.LayoutParams(MATCH, MATCH))
         root.addView(keyboardPanel, FrameLayout.LayoutParams(MATCH, dpi(240f), Gravity.BOTTOM))
+        // The letter preview bubble is drawn above the keyboard's own bounds.
+        keyboardPanel.clipChildren = false
+        keyboardPanel.clipToPadding = false
+        root.clipChildren = false
 
         toast = label("", 17f, fonts.bold, UiColors.TOAST_TEXT).apply {
             background = rounded(UiColors.TOAST, dp(14f))
@@ -242,7 +246,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     private fun layoutKeyboard() {
         val w = root.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
         val h = root.height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
-        val kh = keyboard.preferredHeight(w, (h * 0.34f).toInt())
+        val kh = keyboard.preferredHeight(w, (h * 0.36f).toInt())
         keyboard.setPadding(0, 0, 0, 0)
         keyboardPanel.setPadding(0, 0, 0, insetBottom)
         keyboardPanel.layoutParams = (keyboardPanel.layoutParams as FrameLayout.LayoutParams).apply { height = kh + insetBottom }

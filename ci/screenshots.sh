@@ -80,6 +80,12 @@ while read -r _ label x y; do KX["$label"]=$x; KY["$label"]=$y; done < <(adb log
 echo "keys found: ${#KX[@]}"
 tap() { adb shell input tap "${KX[$1]}" "${KY[$1]}"; sleep 0.35; }
 if [ "${#KX[@]}" -ge 35 ]; then
+  # Hold a key to capture the letter preview bubble.
+  adb shell input swipe "${KX[ش]}" "${KY[ش]}" "${KX[ش]}" "${KY[ش]}" 1500 &
+  sleep 0.8
+  adb exec-out screencap -p > "$OUT/20_key_preview.png"
+  wait
+  tap DELETE
   for ch in ك ت ا ب ة; do tap "$ch"; done
   tap ENTER
   sleep 3.5

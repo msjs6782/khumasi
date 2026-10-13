@@ -86,16 +86,16 @@ class KeyboardView(context: Context, private val fonts: Fonts) : View(context) {
 
     /** Preferred height for a given width: four rows of comfortable keys. */
     fun preferredHeight(width: Int, maxHeight: Int): Int {
-        val keyW = (width - dp(8f) * 2 - GAP_DP * 10 * resources.displayMetrics.density) / 11f
-        val keyH = min(dp(56f), maxOf(dp(40f), keyW * 1.42f))
-        val total = keyH * 4 + dp(GAP_DP) * 3 + dp(14f) * 2
+        val keyW = (width - dp(SIDE_DP) * 2 - dp(GAP_DP) * 10) / 11f
+        val keyH = min(dp(62f), maxOf(dp(44f), keyW * 1.65f))
+        val total = keyH * 4 + dp(GAP_DP) * 3 + dp(VPAD_DP) * 2
         return min(total.toInt(), maxHeight)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        val pad = dp(8f)
+        val pad = dp(SIDE_DP)
         val gap = dp(GAP_DP)
-        val top = dp(14f)
+        val top = dp(VPAD_DP)
         val keyH = (h - top * 2 - gap * 3) / 4f
         val letterW = (w - pad * 2 - gap * 10) / 11f
         for ((ri, row) in rows.withIndex()) {
@@ -112,7 +112,8 @@ class KeyboardView(context: Context, private val fonts: Fonts) : View(context) {
                 row[1].rect.set(pad, y, pad + half, y + keyH)          // delete (left)
             }
         }
-        textPaint.textSize = min(keyH * 0.5f, letterW * 0.78f)
+        textPaint.textSize = min(keyH * 0.56f, letterW * 0.86f)
+        bubbleTextSize = min(keyH * 0.95f, letterW * 1.4f)
         iconPaint.strokeWidth = dp(2.2f)
     }
 
@@ -154,6 +155,35 @@ class KeyboardView(context: Context, private val fonts: Fonts) : View(context) {
                 DELETE -> drawBackspace(canvas, cx, cy, r.height() * 0.42f)
             }
         }
+        // Letter preview above the finger, so the touched letter is visible while pressing.
+        for (key in pointerKeys.values) if (key.kind == LETTER) drawBubble(canvas, key)
+    }
+
+    private val bubbleRect = RectF()
+    private var bubbleTextSize = 0f
+
+    private fun drawBubble(canvas: Canvas, key: Key) {
+        val r = key.rect
+        val w = r.width() * 1.55f
+        val h = r.height() * 1.25f
+        val cx = r.centerX().coerceIn(w / 2 + dp(2f), width - w / 2 - dp(2f))
+        bubbleRect.set(cx - w / 2, r.top - h - dp(6f), cx + w / 2, r.top - dp(6f))
+        val radius = dp(12f)
+        shadePaint.color = withAlpha(android.graphics.Color.BLACK, 0.4f)
+        canvas.drawRoundRect(bubbleRect.left, bubbleRect.top + dp(3f), bubbleRect.right, bubbleRect.bottom + dp(3f), radius, radius, shadePaint)
+        val state = states[key.ch] ?: LetterState.UNKNOWN
+        keyPaint.color = when (state) {
+            LetterState.CORRECT -> opaque(Palette.CORRECT)
+            LetterState.PRESENT -> opaque(Palette.PRESENT)
+            else -> opaque(Palette.TILE_IVORY)
+        }
+        canvas.drawRoundRect(bubbleRect, radius, radius, keyPaint)
+        val old = textPaint.textSize
+        textPaint.textSize = bubbleTextSize
+        textPaint.typeface = fonts.heavy
+        textPaint.color = if (state == LetterState.CORRECT || state == LetterState.PRESENT) android.graphics.Color.WHITE else opaque(Palette.TILE_INK)
+        drawCentered(canvas, key.ch.toString(), bubbleRect.centerX(), bubbleRect.centerY())
+        textPaint.textSize = old
     }
 
     private val bounds = android.graphics.Rect()
@@ -197,6 +227,12 @@ class KeyboardView(context: Context, private val fonts: Fonts) : View(context) {
         return if (bestRowDist < dp(24f)) best else null
     }
 
+    /** The preview bubble draws outside this view, so the parent must repaint too. */
+    private fun repaint() {
+        invalidate()
+        (parent as? View)?.invalidate()
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
@@ -214,7 +250,7 @@ class KeyboardView(context: Context, private val fonts: Fonts) : View(context) {
                         repeatHandler.postDelayed(repeatDelete, 420)
                     }
                 }
-                invalidate()
+                repaint()
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 val i = event.actionIndex
@@ -223,14 +259,14 @@ class KeyboardView(context: Context, private val fonts: Fonts) : View(context) {
                     key.pressed = false
                     if (key.kind == DELETE) repeatHandler.removeCallbacks(repeatDelete)
                     if (key.kind == ENTER && keyAt(event.getX(i), event.getY(i)) === key) listener?.onEnter()
-                    invalidate()
+                    repaint()
                 }
             }
             MotionEvent.ACTION_CANCEL -> {
                 repeatHandler.removeCallbacks(repeatDelete)
                 pointerKeys.values.forEach { it.pressed = false }
                 pointerKeys.clear()
-                invalidate()
+                repaint()
             }
         }
         return true
@@ -261,6 +297,8 @@ class KeyboardView(context: Context, private val fonts: Fonts) : View(context) {
         private const val LETTER = 0
         private const val ENTER = 1
         private const val DELETE = 2
-        private const val GAP_DP = 5f
+        private const val GAP_DP = 4f
+        private const val SIDE_DP = 5f
+        private const val VPAD_DP = 10f
     }
 }
