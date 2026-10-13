@@ -92,6 +92,10 @@ if [ "${#KX[@]}" -ge 35 ]; then
   adb exec-out screencap -p > "$OUT/15_win_animation.png"
   sleep 4
   adb exec-out screencap -p > "$OUT/16_win_result.png"
+  # Closing the result (back gesture) brings the board back with a "new word" bar.
+  adb shell input keyevent 4
+  sleep 2.5
+  adb exec-out screencap -p > "$OUT/19_result_closed.png"
   echo "typed through the keyboard"
 else
   echo "::error::Keyboard positions were not logged"

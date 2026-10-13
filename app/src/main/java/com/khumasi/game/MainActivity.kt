@@ -587,7 +587,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
                     Log.i("KhumasiDemo", "submitted")
                 }
             }
-            handler.postDelayed(submit, 1200)
+            handler.postDelayed(submit, 3500)
         }
         if (i.getBooleanExtra("demo_rules", false)) handler.postDelayed({ showRules() }, 600)
         if (i.getBooleanExtra("demo_stats", false)) handler.postDelayed({ showStats() }, 600)
