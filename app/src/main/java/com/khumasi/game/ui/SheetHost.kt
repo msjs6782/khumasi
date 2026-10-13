@@ -96,10 +96,12 @@ class SheetHost(context: Context, private val fonts: Fonts) : FrameLayout(contex
     fun close() {
         val card = current ?: return
         current = null
-        val done = {
+        val done: () -> Unit = {
             removeAllViews()
             visibility = GONE
-            onClose?.invoke().also { onClose = null }
+            val callback = onClose
+            onClose = null
+            callback?.invoke()
         }
         if (reduceMotion) done() else card.animate().translationY(card.height.toFloat()).setDuration(180).withEndAction(done).start()
     }
