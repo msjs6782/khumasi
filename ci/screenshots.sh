@@ -81,8 +81,8 @@ echo "keys found: ${#KX[@]}"
 tap() { adb shell input tap "${KX[$1]}" "${KY[$1]}"; sleep 0.35; }
 if [ "${#KX[@]}" -ge 35 ]; then
   # Hold a key to capture the letter preview bubble.
-  adb shell input swipe "${KX[ش]}" "${KY[ش]}" "${KX[ش]}" "${KY[ش]}" 1500 &
-  sleep 0.8
+  adb shell input swipe "${KX[ش]}" "${KY[ش]}" "${KX[ش]}" "${KY[ش]}" 4000 &
+  sleep 2
   adb exec-out screencap -p > "$OUT/20_key_preview.png"
   wait
   tap DELETE
