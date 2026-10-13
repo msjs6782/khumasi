@@ -55,7 +55,7 @@ data class Progress(
     val totalWins: Int get() = unassisted.wins + assisted.wins + daily.wins + friendWins
     val islandLevel: Int get() = Island.levelFor(totalWins)
 
-    fun dailyDone(day: Int): Boolean = lastDailyDay == day
+    fun dailyDone(day: Int): Boolean = day > 0 && lastDailyDay == day
 
     /** The daily streak as it stands today: it is lost once a whole day passes without a win. */
     fun dailyStreak(today: Int): Int = if (lastDailyDay >= today - 1) daily.currentStreak else 0

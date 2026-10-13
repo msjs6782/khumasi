@@ -4,17 +4,18 @@ import kotlin.random.Random
 
 /**
  * The daily challenge: one word per calendar day, the same on every phone with the same word
- * list, with no server. Day 1 is 14 October 2026.
+ * list, with no server. Day 1 is 1 October 2026.
  */
 object Daily {
-    const val FIRST_EPOCH_DAY = 20740L
+    const val FIRST_EPOCH_DAY = 20727L
     private const val DAY_MS = 86_400_000L
     private const val SEED = 0x6B68756DL // fixed forever: changing it changes everyone's words
 
     /** Local calendar day (days since 1970-01-01) for a time and the device's UTC offset. */
     fun localEpochDay(nowMs: Long, offsetMs: Int): Long = Math.floorDiv(nowMs + offsetMs, DAY_MS)
 
-    fun number(epochDay: Long): Int = (epochDay - FIRST_EPOCH_DAY + 1).toInt()
+    /** Never below 1, even if the phone's date is set before the first day. */
+    fun number(epochDay: Long): Int = (epochDay - FIRST_EPOCH_DAY + 1).toInt().coerceAtLeast(1)
 
     /** Milliseconds until the next local midnight, when a new challenge opens. */
     fun msUntilNext(nowMs: Long, offsetMs: Int): Long {

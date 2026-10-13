@@ -88,10 +88,19 @@ shot 34_friend_enter 7 --es demo_answer "مدرسة" --es demo_friend_word "مك
 shot 35_friend_round 9 --es demo_answer "مدرسة" --ez demo_friend_start true
 # Sharing a challenge message to the app (as from a chat app) opens it ready to play.
 adb shell am force-stop "$PKG"
-adb shell am start -W -a android.intent.action.SEND -t text/plain --es android.intent.extra.TEXT "تحديتك! الرمز: KH-TEST" -n "$PKG/$ACT" >/dev/null
+adb shell am start -W -a android.intent.action.SEND -t text/plain --es android.intent.extra.TEXT "'تحديتك! الرمز: KH-TEST'" -n "$PKG/$ACT" >/dev/null
 sleep 6
 adb exec-out screencap -p > "$OUT/36_shared_bad_code.png"
 echo "captured 36_shared_bad_code"
+CODE=$(adb logcat -d -s KhumasiDemo:I | grep -o "code KH-[A-Z0-9-]*" | tail -1 | cut -d' ' -f2)
+echo "friend code from the app: $CODE"
+if [ -n "$CODE" ]; then
+  adb shell am force-stop "$PKG"
+  adb shell am start -W -a android.intent.action.SEND -t text/plain --es android.intent.extra.TEXT "'تحديتك في خماسي! الرمز: $CODE'" -n "$PKG/$ACT" >/dev/null
+  sleep 6
+  adb exec-out screencap -p > "$OUT/37_shared_code.png"
+  echo "captured 37_shared_code"
+fi
 
 # A short 16:9 phone (360x640 dp): the board and keyboard must fit without clipping.
 adb shell wm size 1080x1920

@@ -1046,6 +1046,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         if (i.getBooleanExtra("demo_daily", false)) handler.postDelayed({ switchTo(GameState.MODE_DAILY) }, 800)
         if (i.getBooleanExtra("demo_friend_create", false)) handler.postDelayed({ showFriendCreate() }, 800)
         i.getStringExtra("demo_friend_word")?.let { w -> handler.postDelayed({ showFriendEnter("تحدّيتك! الرمز: " + FriendCode.encode(ArabicNormalizer.normalize(w), 9)) }, 800) }
+        if (i.getBooleanExtra("demo_friend_create", false)) Log.i("KhumasiDemo", "code " + FriendCode.encode("سيارة", 3))
         if (i.getBooleanExtra("demo_friend_start", false)) handler.postDelayed({ startFriend(FriendCode.encode("مكتبة", 9)) }, 800)
         if (i.getBooleanExtra("demo_tutorial", false)) handler.postDelayed({ showTutorial() }, 600)
         if (i.getBooleanExtra("demo_result", false) && state.isOver) handler.postDelayed({ showResult(levelUp = false) }, 900)

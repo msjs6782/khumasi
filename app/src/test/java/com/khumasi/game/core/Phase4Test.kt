@@ -19,13 +19,15 @@ class Phase4Test {
     }
 
     @Test fun dailyDayNumbers() {
-        val day1Noon = 20740L * 86_400_000L + 12 * 3_600_000L
+        val day1Noon = Daily.FIRST_EPOCH_DAY * 86_400_000L + 12 * 3_600_000L
         assertEquals(1, Daily.number(Daily.localEpochDay(day1Noon, 0)))
         // 23:30 UTC on day 1 is already day 2 in Riyadh (UTC+3).
-        val late = 20740L * 86_400_000L + 23 * 3_600_000L + 30 * 60_000L
+        val late = Daily.FIRST_EPOCH_DAY * 86_400_000L + 23 * 3_600_000L + 30 * 60_000L
         assertEquals(1, Daily.number(Daily.localEpochDay(late, 0)))
         assertEquals(2, Daily.number(Daily.localEpochDay(late, 3 * 3_600_000)))
         assertEquals(30 * 60_000L, Daily.msUntilNext(late, 0))
+        assertEquals(1, Daily.number(Daily.FIRST_EPOCH_DAY - 5)) // a phone set to an earlier date
+        assertEquals(13, Daily.number(20739L)) // 13 October 2026
     }
 
     @Test fun dailyWordIsStableAndCycles() {
@@ -52,6 +54,7 @@ class Phase4Test {
         assertEquals(1, p.daily.currentStreak)
         assertEquals(2, p.daily.bestStreak)
         assertTrue(p.dailyDone(6))
+        assertFalse(Progress().dailyDone(0)) // "never played" is not "done today"
         assertEquals(0, p.unassisted.played) // free-play statistics are untouched
         assertEquals(3, p.totalWins)
     }
