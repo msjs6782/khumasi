@@ -169,16 +169,16 @@ void main() {
         vec2 local = vObjPos.xy - center;
         float d = sdRoundRect(local, uCellHalf, uCellRadius);
         float inside = smoothstep(0.015, -0.015, d);
-        bool active = abs(gy - uActiveRow) < 0.5;
-        vec3 socket = toLinear(active ? mix(uSocketColor, uActiveColor, 0.35 + 0.15 * uPulse) : uSocketColor);
+        bool isActive = abs(gy - uActiveRow) < 0.5;
+        vec3 socket = toLinear(isActive ? mix(uSocketColor, uActiveColor, 0.35 + 0.15 * uPulse) : uSocketColor);
         // inner shadow along the upper-left wall, light along the lower-right lip
         float wall = smoothstep(-0.16, 0.0, d);
         float dirShade = clamp(0.5 + (local.y / uCellHalf.y) * 0.35 - (local.x / uCellHalf.x) * 0.15, 0.0, 1.0);
         socket *= 1.0 - wall * 0.55 * dirShade;
         float lip = smoothstep(0.0, 0.02, d) * smoothstep(0.06, 0.02, d);
         albedo = mix(albedo, socket, inside);
-        albedo += lip * 0.05 * (active ? toLinear(uActiveColor) : vec3(1.0));
-        if (active) {
+        albedo += lip * 0.05 * (isActive ? toLinear(uActiveColor) : vec3(1.0));
+        if (isActive) {
             float ring = smoothstep(0.05, 0.0, abs(d + 0.01));
             albedo += ring * toLinear(uActiveColor) * (0.35 + 0.25 * uPulse);
         }

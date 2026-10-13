@@ -11,6 +11,8 @@ mkdir -p "$OUT"
 adb wait-for-device
 adb shell input keyevent 82 >/dev/null 2>&1 || true
 adb install -r "$APK"
+# Android shows a one-time "Viewing full screen" hint for immersive apps; mark it as seen.
+adb shell settings put secure immersive_mode_confirmations confirmed
 adb logcat -c
 
 shot() {
