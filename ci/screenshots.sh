@@ -35,7 +35,7 @@ adb shell am force-stop "$PKG"
 adb logcat -d > "$OUT/logcat_part0.txt"
 adb logcat -c
 adb shell am start -W -n "$PKG/$ACT" --es demo_answer "مدرسة" --es demo_input "ممممم" --ez demo_submit true >/dev/null
-for _ in $(seq 1 60); do adb logcat -d -s KhumasiDemo:I | grep -q submitted && break; sleep 0.25; done
+for _ in $(seq 1 80); do adb logcat -d -s KhumasiDemo:I | grep -q submitted && adb logcat -d -s KhumasiGL:I | grep -q "first frame" && break; sleep 0.25; done
 sleep 0.4
 adb exec-out screencap -p > "$OUT/04_rejected.png"
 echo "captured 04_rejected"
@@ -105,7 +105,7 @@ fi
 adb logcat -d > "$OUT/logcat_part2.txt"
 cat "$OUT/logcat_part0.txt" "$OUT/logcat_part1.txt" "$OUT/logcat_part2.txt" > "$OUT/logcat.txt"
 rm -f "$OUT"/logcat_part*.txt
-grep -E "Khumasi|KhumasiGL" "$OUT/logcat.txt" | head -50 > "$OUT/app_log.txt" || true
+grep -E "Khumasi|KhumasiGL" "$OUT/logcat.txt" | grep -v KhumasiKeys | head -120 > "$OUT/app_log.txt" || true
 if grep -q "FATAL EXCEPTION" "$OUT/logcat.txt"; then
   echo "::error::The app crashed on the emulator"
   grep -A 30 "FATAL EXCEPTION" "$OUT/logcat.txt" | head -60

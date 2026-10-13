@@ -95,6 +95,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     // ------------------------------------------------------------------ setup
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val createdAt = SystemClock.uptimeMillis()
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -128,6 +129,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
             }
         })
 
+        Log.i(TAG, "UI ready in ${SystemClock.uptimeMillis() - createdAt} ms")
         when {
             demo -> scheduleDemoActions()
             !store.seenRules -> handler.postDelayed({ showRules(); store.seenRules = true }, 500)

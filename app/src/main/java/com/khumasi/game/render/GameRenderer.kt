@@ -59,6 +59,9 @@ class GameRenderer(
     private var height = 1
     private val startTime = SystemClock.uptimeMillis()
 
+    private var firstFrameLogged = false
+    private var surfaceCreatedAt = 0L
+
     // GL resources
     private var ready = false
     private lateinit var tileMesh: Mesh
@@ -155,8 +158,13 @@ class GameRenderer(
             ready = false
             island = null
             islandDirty = true
+            val t0 = SystemClock.uptimeMillis()
             createResources()
             ready = true
+            firstFrameLogged = false
+            surfaceCreatedAt = SystemClock.uptimeMillis()
+            Log.i("KhumasiGL", "GL ready: setup ${surfaceCreatedAt - t0} ms, " +
+                "${GLES30.glGetString(GLES30.GL_RENDERER)}, ${GLES30.glGetString(GLES30.GL_VERSION)}")
             listener.onRendererReady()
         } catch (t: Throwable) {
             Log.e("KhumasiGL", "Renderer setup failed", t)
@@ -250,6 +258,10 @@ class GameRenderer(
         GLES30.glClear(GLES30.GL_DEPTH_BUFFER_BIT)
         drawSlab(now, glass, shadowTarget != null)
         drawTiles(shadowTarget != null)
+        if (!firstFrameLogged) {
+            firstFrameLogged = true
+            Log.i("KhumasiGL", "first frame ${SystemClock.uptimeMillis() - surfaceCreatedAt} ms after setup")
+        }
     }
 
     // ------------------------------------------------------------------ setup
