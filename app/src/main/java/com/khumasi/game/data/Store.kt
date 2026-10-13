@@ -70,10 +70,11 @@ class WordRepository(private val context: Context) {
             BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).useLines { Solutions.parse(it) }
         }
 
-    fun loadGuesses(length: Int, solutions: List<Solution>): GuessList =
-        context.assets.open("dict/guesses$length.txt").use { stream ->
-            BufferedReader(InputStreamReader(stream, Charsets.UTF_8), 1 shl 16).useLines { lines ->
-                GuessList.fromLines(length, lines, solutions.map { it.word }.filter { ArabicNormalizer.isClean(it) })
-            }
-        }
+    fun loadGuesses(length: Int, solutions: List<Solution>): GuessList {
+        val text = context.assets.open("dict/guesses$length.txt").use { it.readBytes() }.toString(Charsets.UTF_8)
+        val list = GuessList.fromText(length, text)
+        // Every solution must be accepted; the build tool guarantees it, this keeps it true regardless.
+        val missing = solutions.map { it.word }.filter { ArabicNormalizer.isClean(it) && it !in list }
+        return if (missing.isEmpty()) list else GuessList.fromText(length, text, missing)
+    }
 }

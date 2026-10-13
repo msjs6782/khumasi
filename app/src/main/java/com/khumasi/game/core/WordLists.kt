@@ -34,6 +34,47 @@ class GuessList private constructor(val length: Int, private val packed: CharArr
     }
 
     companion object {
+        /**
+         * Fast path for the bundled file: one pass over the whole text, no per-line strings, and
+         * no sorting when the file is already sorted (the build tool writes it sorted).
+         */
+        fun fromText(length: Int, text: CharSequence, extra: Collection<String> = emptyList()): GuessList {
+            var packed = CharArray(140_000 * length)
+            var n = 0
+            var sorted = true
+            var i = 0
+            val end = text.length
+            while (i < end) {
+                var j = i
+                while (j < end && text[j] != '\n') j++
+                var lineEnd = j
+                if (lineEnd > i && text[lineEnd - 1] == '\r') lineEnd--
+                if (lineEnd - i == length && text[i] != '#') {
+                    if ((n + 1) * length > packed.size) packed = packed.copyOf(packed.size * 2)
+                    val base = n * length
+                    for (k in 0 until length) packed[base + k] = text[i + k]
+                    if (n > 0 && sorted) {
+                        var cmp = 0
+                        for (k in 0 until length) {
+                            cmp = packed[base + k] - packed[base - length + k]
+                            if (cmp != 0) break
+                        }
+                        if (cmp <= 0) sorted = false
+                    }
+                    n++
+                }
+                i = j + 1
+            }
+            val missing = extra.filter { it.length == length }
+            if (!sorted || missing.isNotEmpty()) {
+                // Rare path: merge extras / repair order through the general builder.
+                val words = ArrayList<String>(n + missing.size)
+                for (w in 0 until n) words.add(String(packed, w * length, length))
+                return fromLines(length, words.asSequence(), missing)
+            }
+            return GuessList(length, packed.copyOf(n * length))
+        }
+
         /** Builds from text lines; comment lines (#) and words of other lengths are skipped. */
         fun fromLines(length: Int, lines: Sequence<String>, extra: Collection<String> = emptyList()): GuessList {
             val words = ArrayList<String>(130_000)

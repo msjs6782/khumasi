@@ -173,6 +173,14 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
 
     // -------------------------------------------------------------- round result
 
+    fun resultTitle(state: GameState): String = if (state.status == GameStatus.WON) {
+        when (state.guesses.size) {
+            1 -> "عبقري!"; 2 -> "مذهل!"; 3 -> "رائع!"; 4 -> "ممتاز!"; 5 -> "أحسنت!"; 6 -> "جيد جدًا!"; 7 -> "نجحت!"
+            else -> "في اللحظة الأخيرة!"
+        }
+    } else "انتهت المحاولات"
+
+    /** Compact on purpose: the island stays visible above it and the buttons need no scrolling. */
     fun result(
         state: GameState,
         solution: Solution?,
@@ -184,47 +192,43 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
     ): View = column().apply {
         val won = state.status == GameStatus.WON
         val display = solution?.display ?: state.answer
-        val headline = if (won) {
-            when (state.guesses.size) {
-                1 -> "عبقري!"; 2 -> "مذهل!"; 3 -> "رائع!"; 4 -> "ممتاز!"; 5 -> "أحسنت!"; 6 -> "جيد جدًا!"; 7 -> "نجحت!"
-                else -> "في اللحظة الأخيرة!"
-            }
-        } else "انتهت المحاولات"
-        addSpaced(text(headline, 15f, bold = true, color = if (won) opaque(Palette.CORRECT) else UiColors.MUTED), 0f)
+        if (!won) addSpaced(text("الكلمة كانت", 14f, color = UiColors.MUTED), 0f)
 
         val wordRow = row()
-        wordRow.addView(text(display, 40f, bold = true).apply { typeface = fonts.heavy }, LinearLayout.LayoutParams(0, wrap, 1f))
+        wordRow.addView(text(display, 36f, bold = true).apply { typeface = fonts.heavy }, LinearLayout.LayoutParams(0, wrap, 1f))
         solution?.category?.let {
             wordRow.addView(text(it, 13f, bold = true, gravity = Gravity.CENTER).apply {
                 background = rounded(Color.parseColor("#FF2C3B58"), ctx.dp(12f))
                 setPadding(ctx.dpi(12f), ctx.dpi(4f), ctx.dpi(12f), ctx.dpi(4f))
             })
         }
-        addSpaced(wordRow, 2f)
-        solution?.meaning?.takeIf { it.isNotBlank() }?.let { addSpaced(text(it, 17f, color = UiColors.TEXT), 2f) }
+        addSpaced(wordRow, 0f)
+        solution?.meaning?.takeIf { it.isNotBlank() }?.let { addSpaced(text(it, 16f), 0f) }
         val seconds = (state.playedMs / 1000).toInt()
         val time = "${ar(seconds / 60)}:${ar(seconds % 60).padStart(2, '٠')}"
-        addSpaced(text("المحاولات: ${ar(state.guesses.size)} من ${ar(state.maxAttempts)}   •   الوقت: $time", 14f, color = UiColors.MUTED), 6f)
-
-        val wins = progress.totalWins
-        val island = if (levelUp) "🏝️ مستوى جديد! جزيرتك الآن في المستوى ${ar(progress.islandLevel)}"
-        else if (Island.winsToNext(wins) > 0) "🏝️ جزيرتك: المستوى ${ar(progress.islandLevel)} — ${ar(Island.winsToNext(wins))} فوز للمستوى التالي"
-        else "🏝️ جزيرتك اكتملت!"
-        addSpaced(text(island, 15f, bold = levelUp, color = if (levelUp) opaque(Palette.PRESENT) else UiColors.TEXT).apply {
-            background = rounded(Color.parseColor("#FF223250"), ctx.dp(12f))
-            setPadding(ctx.dpi(12f), ctx.dpi(8f), ctx.dpi(12f), ctx.dpi(8f))
-        }, 12f)
-
-        addSpaced(stats(progress, if (won) state.guesses.size else null), 8f)
+        val attempts = if (won) "المحاولات: ${ar(state.guesses.size)} من ${ar(state.maxAttempts)}" else "استُنفدت المحاولات الثماني"
+        addSpaced(text("$attempts   •   الوقت: $time", 13f, color = UiColors.MUTED), 4f)
 
         val buttons = row()
         buttons.addView(button("كلمة جديدة", primary = true, onClick = onNext), LinearLayout.LayoutParams(0, wrap, 1.4f))
         buttons.addView(button("مشاركة", primary = false, onClick = onShare), LinearLayout.LayoutParams(0, wrap, 1f).apply { marginStart = ctx.dpi(10f) })
-        addSpaced(buttons, 18f)
-        addSpaced(text("الإبلاغ عن هذه الكلمة", 14f, color = UiColors.MUTED, gravity = Gravity.CENTER).apply {
-            setPadding(0, ctx.dpi(10f), 0, ctx.dpi(4f))
+        addSpaced(buttons, 14f)
+
+        val wins = progress.totalWins
+        val island = when {
+            levelUp -> "🏝️ مستوى جديد! جزيرتك الآن في المستوى ${ar(progress.islandLevel)}"
+            Island.winsToNext(wins) > 0 -> "🏝️ جزيرتك: المستوى ${ar(progress.islandLevel)} — ${ar(Island.winsToNext(wins))} فوز للمستوى التالي"
+            else -> "🏝️ جزيرتك اكتملت!"
+        }
+        addSpaced(text(island, 14f, bold = levelUp, color = if (levelUp) opaque(Palette.PRESENT) else UiColors.TEXT).apply {
+            background = rounded(Color.parseColor("#FF223250"), ctx.dp(12f))
+            setPadding(ctx.dpi(12f), ctx.dpi(7f), ctx.dpi(12f), ctx.dpi(7f))
+        }, 12f)
+        addSpaced(numbers(progress.unassisted), 12f)
+        addSpaced(text("الإبلاغ عن هذه الكلمة", 13f, color = UiColors.MUTED, gravity = Gravity.CENTER).apply {
+            setPadding(0, ctx.dpi(10f), 0, ctx.dpi(2f))
             setOnClickListener { onReport() }
-        }, 4f)
+        }, 2f)
     }
 
     // -------------------------------------------------------------- report a word

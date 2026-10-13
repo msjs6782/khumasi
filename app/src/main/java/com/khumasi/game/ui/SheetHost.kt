@@ -32,7 +32,13 @@ class SheetHost(context: Context, private val fonts: Fonts) : FrameLayout(contex
      * Shows a sheet. [dismissible] = false keeps it open when the scrim is tapped (the round
      * result), though the close button and back gesture still work.
      */
-    fun show(title: String, content: View, dismissible: Boolean = true, onClosed: (() -> Unit)? = null) {
+    fun show(
+        title: String,
+        content: View,
+        dismissible: Boolean = true,
+        maxHeightFraction: Float = 0.88f,
+        onClosed: (() -> Unit)? = null,
+    ) {
         removeAllViews()
         onClose = onClosed
         val scrim = View(context).apply {
@@ -76,9 +82,9 @@ class SheetHost(context: Context, private val fonts: Fonts) : FrameLayout(contex
 
         val lp = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM)
         addView(card, lp)
-        // Never taller than 88% of the screen.
+        // Never taller than the given share of the screen.
         card.post {
-            val max = (height * 0.88f).toInt()
+            val max = (height * maxHeightFraction).toInt()
             if (card.height > max) {
                 card.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, max, Gravity.BOTTOM)
             }

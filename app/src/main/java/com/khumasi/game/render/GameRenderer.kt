@@ -47,6 +47,13 @@ class GameRenderer(
 
     private var islandLevel = 0
     private var islandDirty = true
+
+    // World view: the board slides away and the camera moves in on the island (round results).
+    private var worldFrom = 0f
+    private var worldTo = 0f
+    private var worldStart = 0L
+    private var worldT = 0f
+    private var boardBaseShiftY = 0f
     private val region = RectF(0f, 0f, 1f, 1f)
     private var width = 1
     private var height = 1
@@ -115,6 +122,28 @@ class GameRenderer(
 
     fun markBusy(until: Long) { busyUntil = max(busyUntil, until) }
 
+    /** Slides the board away to show the island (true) or brings it back (false). */
+    fun setWorldView(on: Boolean, animate: Boolean = true) {
+        val now = SystemClock.uptimeMillis()
+        val target = if (on) 1f else 0f
+        if (!animate || reduceMotion) {
+            worldFrom = target; worldTo = target; worldStart = 0L; worldT = target
+        } else {
+            worldFrom = worldT; worldTo = target; worldStart = now
+            markBusy(now + WORLD_MS)
+        }
+        if (ready) layoutCameras()
+    }
+
+    private fun updateWorld(now: Long): Boolean {
+        if (worldStart == 0L) return false
+        val p = ((now - worldStart).toFloat() / WORLD_MS).coerceIn(0f, 1f)
+        val e = BoardAnimator.easeInOutCubic(p)
+        worldT = worldFrom + (worldTo - worldFrom) * e
+        if (p >= 1f) worldStart = 0L
+        return true
+    }
+
     private fun syncBusy() { busyUntil = max(busyUntil, board.busyUntil) }
 
     fun syncFromBoard() = syncBusy()
@@ -160,6 +189,7 @@ class GameRenderer(
         val ambient = q.ambient && !reduceMotion
         val time = if (ambient) (now - startTime) / 1000f else 12f
         if (islandDirty) rebuildIsland()
+        if (updateWorld(now)) layoutCameras()
         syncBusy()
 
         computeTiles(now)
@@ -196,6 +226,8 @@ class GameRenderer(
         GLES30.glClearColor(0.97f, 0.85f, 0.68f, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         drawWorld(islandModel, time, withShadows = shadowTarget != null)
+
+        if (worldT >= 0.999f) return
 
         // 4. board shadows
         if (shadowTarget != null) {
@@ -301,7 +333,9 @@ class GameRenderer(
         measure(dist)
         val sx = rcx - (bounds[0] + bounds[1]) / 2f
         val sy = rcy - (bounds[2] + bounds[3]) / 2f
-        val shift = FloatArray(16).also { Matrix.setIdentityM(it, 0); it[12] = sx; it[13] = sy }
+        boardBaseShiftY = sy
+        val drop = worldT * (bounds[3] - bounds[2] + 1.2f) // off the bottom of the screen
+        val shift = FloatArray(16).also { Matrix.setIdentityM(it, 0); it[12] = sx; it[13] = sy - drop }
         Matrix.multiplyMM(boardProj, 0, shift, 0, base, 0)
         Matrix.setLookAtM(boardView, 0, 0f, 0f, dist, 0f, 0f, 0f, 0f, 1f, 0f)
         Matrix.multiplyMM(boardVP, 0, boardProj, 0, boardView, 0)
@@ -330,14 +364,17 @@ class GameRenderer(
         val tanV = tan(Math.toRadians(fov / 2.0)).toFloat()
         val tanH = tanV * aspect
         // Island spans about the screen width; it sits behind the upper half of the board.
-        val dist = (IslandBuilder.RADIUS * 1.02f) / max(0.12f, tanH)
-        val el = Math.toRadians(8.5).toFloat()
-        val tx = 0f; val ty = 0.9f; val tz = 0f
+        val w = worldT
+        val playDist = (IslandBuilder.RADIUS * 1.02f) / max(0.12f, tanH)
+        val worldDist = (IslandBuilder.RADIUS * 1.18f) / max(0.12f, tanH)
+        val dist = playDist + (worldDist - playDist) * w
+        val el = Math.toRadians(8.5 + 13.0 * w).toFloat()
+        val tx = 0f; val ty = 0.9f - 0.3f * w; val tz = 0f
         bgCam[0] = tx; bgCam[1] = ty + dist * sin(el); bgCam[2] = tz + dist * cos(el)
         Matrix.setLookAtM(bgView, 0, bgCam[0], bgCam[1], bgCam[2], tx, ty, tz, 0f, 1f, 0f)
         val base = FloatArray(16)
         Matrix.perspectiveM(base, 0, fov, aspect, 0.5f, 400f)
-        val shift = FloatArray(16).also { Matrix.setIdentityM(it, 0); it[13] = ISLAND_NDC_Y }
+        val shift = FloatArray(16).also { Matrix.setIdentityM(it, 0); it[13] = ISLAND_NDC_Y + (WORLD_NDC_Y - ISLAND_NDC_Y) * w }
         Matrix.multiplyMM(bgProj, 0, shift, 0, base, 0)
         Matrix.multiplyMM(bgVP, 0, bgProj, 0, bgView, 0)
 
@@ -612,6 +649,8 @@ class GameRenderer(
         const val BOARD_FOV = 26f
         const val FIT = 0.97f
         const val ISLAND_NDC_Y = 0.5f
+        const val WORLD_NDC_Y = 0.42f
+        const val WORLD_MS = 900L
         const val SHADOW_SIZE = 1024
 
         fun normalize(v: FloatArray): FloatArray {

@@ -110,7 +110,7 @@ internal object IslandBuilder {
         return IslandModel(
             ground, sails, sailsPivot,
             boat, floatArrayOf(4.1f, 0f, 3.4f),
-            balloon, floatArrayOf(-1.6f, 4.6f, -1.2f),
+            balloon, floatArrayOf(-1.6f, 3.7f, -1.2f),
         )
     }
 

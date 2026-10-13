@@ -435,6 +435,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
 
     private fun startNewRound() {
         sheets.close()
+        surface?.send { setWorldView(false) }
         state = newRound()
         store.saveRound(state, progress)
         syncBoard(animate = true)
@@ -475,13 +476,19 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
 
     private fun showResult(levelUp: Boolean) {
         if (!state.isOver) return
+        // The board slides away so the island shows above the result.
+        surface?.send { setWorldView(true) }
         val content = panels.result(
             state, solutionFor(state.answer), progress, levelUp,
             onNext = { startNewRound() },
             onShare = { share() },
             onReport = { showReport() },
         )
-        sheets.show(if (state.status == GameStatus.WON) "فزت!" else "الكلمة كانت", content, dismissible = true) { updateRoundUi() }
+        sheets.show(panels.resultTitle(state), content, dismissible = true, maxHeightFraction = 0.64f) {
+            // Closing the result brings the board back so the player can look at their guesses.
+            if (state.isOver) surface?.send { setWorldView(false) }
+            updateRoundUi()
+        }
     }
 
     private fun showRules() = sheets.show("كيف تلعب", panels.rules())
@@ -490,7 +497,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
 
     private fun showSettings() {
         val s = Panels.SettingsState(store.reduceMotion, store.lightMode, store.haptics)
-        val view = panels.settings(s, BuildConfig.VERSION_NAME) { st, lightChanged ->
+        val view = panels.settings(s, "\u2066" + BuildConfig.VERSION_NAME + "\u2069") { st, lightChanged ->
             store.reduceMotion = st.reduceMotion
             store.haptics = st.haptics
             store.lightMode = st.lightMode
@@ -572,7 +579,16 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
 
     private fun scheduleDemoActions() {
         val i = intent
-        if (i.getBooleanExtra("demo_submit", false)) handler.postDelayed({ onEnter() }, 1500)
+        if (i.getBooleanExtra("demo_submit", false)) {
+            val submit = object : Runnable {
+                override fun run() {
+                    if (guesses == null) { handler.postDelayed(this, 200); return }
+                    onEnter()
+                    Log.i("KhumasiDemo", "submitted")
+                }
+            }
+            handler.postDelayed(submit, 1200)
+        }
         if (i.getBooleanExtra("demo_rules", false)) handler.postDelayed({ showRules() }, 600)
         if (i.getBooleanExtra("demo_stats", false)) handler.postDelayed({ showStats() }, 600)
         if (i.getBooleanExtra("demo_settings", false)) handler.postDelayed({ showSettings() }, 600)

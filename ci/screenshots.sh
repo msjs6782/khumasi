@@ -31,7 +31,14 @@ shot 02_midgame 8 --es demo_answer "مدرسة" --es demo_guesses "سيارة,م
 # Duplicate letters: answer سلسلة with repeated guesses.
 shot 03_duplicates 8 --es demo_answer "سلسلة" --es demo_guesses "سلاسل,مسلسل" --ei demo_wins 2
 # A word that is not in the list is rejected with a message and no attempt is used.
-shot 04_rejected 3 --es demo_answer "مدرسة" --es demo_input "ممممم" --ez demo_submit true
+adb shell am force-stop "$PKG"
+adb logcat -d > "$OUT/logcat_part0.txt"
+adb logcat -c
+adb shell am start -W -n "$PKG/$ACT" --es demo_answer "مدرسة" --es demo_input "ممممم" --ez demo_submit true >/dev/null
+for _ in $(seq 1 60); do adb logcat -d -s KhumasiDemo:I | grep -q submitted && break; sleep 0.25; done
+sleep 0.4
+adb exec-out screencap -p > "$OUT/04_rejected.png"
+echo "captured 04_rejected"
 # A won round with the result sheet.
 shot 05_won 9 --es demo_answer "مدرسة" --es demo_guesses "مكتبة,مدرسة" --ez demo_result true --ei demo_wins 12
 # A lost round.
@@ -45,6 +52,16 @@ shot 09_light 8 --es demo_answer "مدرسة" --es demo_guesses "سيارة,مك
 # Statistics and settings sheets.
 shot 10_stats 6 --es demo_answer "مدرسة" --ez demo_stats true --ei demo_wins 20
 shot 11_settings 6 --es demo_answer "مدرسة" --ez demo_settings true
+
+# A short 16:9 phone (360x640 dp): the board and keyboard must fit without clipping.
+adb shell wm size 1080x1920
+adb shell wm density 480
+sleep 2
+shot 17_small_midgame 9 --es demo_answer "مدرسة" --es demo_guesses "سيارة,مكتبة,درجات,حديقة,جزيرة,مدينة" --es demo_input "مد" --ei demo_wins 4
+shot 18_small_result 9 --es demo_answer "مدرسة" --es demo_guesses "مكتبة,مدرسة" --ez demo_result true --ei demo_wins 12
+adb shell wm size reset
+adb shell wm density reset
+sleep 2
 
 # Simulated front-camera cutout.
 adb shell cmd overlay enable com.android.internal.display.cutout.emulation.tall >/dev/null 2>&1 || true
@@ -82,7 +99,8 @@ else
 fi
 
 adb logcat -d > "$OUT/logcat_part2.txt"
-cat "$OUT/logcat_part1.txt" "$OUT/logcat_part2.txt" > "$OUT/logcat.txt"
+cat "$OUT/logcat_part0.txt" "$OUT/logcat_part1.txt" "$OUT/logcat_part2.txt" > "$OUT/logcat.txt"
+rm -f "$OUT"/logcat_part*.txt
 grep -E "Khumasi|KhumasiGL" "$OUT/logcat.txt" | head -50 > "$OUT/app_log.txt" || true
 if grep -q "FATAL EXCEPTION" "$OUT/logcat.txt"; then
   echo "::error::The app crashed on the emulator"

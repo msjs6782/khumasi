@@ -58,6 +58,17 @@ class DictionaryTest {
         assertTrue(solutions.count { it.difficulty == 1 } >= 50)
     }
 
+    @Test fun fastLoaderMatchesTheGeneralLoader() {
+        val text = asset("guesses5.txt").readText()
+        val fast = GuessList.fromText(5, text)
+        assertEquals(guesses.size, fast.size)
+        for (w in listOf("مدرسة", "كتبوا", "لؤلؤة", "تفاحة")) assertTrue(w in fast)
+        assertFalse("ممممم" in fast)
+        val unsorted = GuessList.fromText(3, "# x\nccc\r\naaa\nbbb\nlonger\n", listOf("zzz"))
+        assertEquals(4, unsorted.size)
+        for (w in listOf("aaa", "bbb", "ccc", "zzz")) assertTrue(w in unsorted)
+    }
+
     @Test fun guessListLookupWorksOnUnsortedInputWithDuplicates() {
         val list = GuessList.fromLines(3, sequenceOf("# c", "ccc", "aaa", "bbb", "aaa", "toolong"), listOf("zzz"))
         assertEquals(4, list.size)
