@@ -138,7 +138,13 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     }
 
     private fun buildUi() {
-        root = FrameLayout(this).apply { setBackgroundColor(opaque(Palette.SLAB)) }
+        // Same colors as the 3D sky and sea, shown for the moment before the first 3D frame.
+        root = FrameLayout(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(opaque(Palette.SKY_ZENITH), opaque(Palette.SKY_HORIZON), opaque(Palette.SEA_SHALLOW), opaque(Palette.SEA_DEEP)),
+            )
+        }
 
         board2d = BoardView2D(this, fonts).apply { visibility = View.GONE }
         renderer = GameRenderer(fonts.heavy, this)
@@ -589,7 +595,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
                     Log.i("KhumasiDemo", "submitted")
                 }
             }
-            handler.postDelayed(submit, 3500)
+            handler.postDelayed(submit, 5000)
         }
         if (i.getBooleanExtra("demo_rules", false)) handler.postDelayed({ showRules() }, 600)
         if (i.getBooleanExtra("demo_stats", false)) handler.postDelayed({ showStats() }, 600)

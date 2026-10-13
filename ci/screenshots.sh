@@ -35,8 +35,8 @@ adb shell am force-stop "$PKG"
 adb logcat -d > "$OUT/logcat_part0.txt"
 adb logcat -c
 adb shell am start -W -n "$PKG/$ACT" --es demo_answer "مدرسة" --es demo_input "ممممم" --ez demo_submit true >/dev/null
-for _ in $(seq 1 80); do adb logcat -d -s KhumasiDemo:I | grep -q submitted && adb logcat -d -s KhumasiGL:I | grep -q "first frame" && break; sleep 0.25; done
-sleep 0.4
+for _ in $(seq 1 120); do adb logcat -d -s KhumasiDemo:I | grep -q submitted && break; sleep 0.1; done
+sleep 0.3
 adb exec-out screencap -p > "$OUT/04_rejected.png"
 echo "captured 04_rejected"
 # A won round with the result sheet.
