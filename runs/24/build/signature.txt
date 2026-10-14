@@ -1,0 +1,2 @@
+V2 Signer: certificate DN: CN=Khumasi, O=Khumasi Game, C=SA
+V2 Signer: certificate SHA-256 digest: 1bb7dab4c88f19fd1aa1bc766b9af0328db87f0e4de6f9f55063e6b66fbb4da7

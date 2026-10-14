@@ -1,0 +1,120 @@
+10-14 12:08:57.767  4213  4213 I Khumasi : UI ready in 416 ms
+10-14 12:08:57.865  4213  4334 I Khumasi : Loaded 121213 guesses in 117 ms
+10-14 12:09:00.133  4213  4328 I KhumasiGL: GL ready: setup 1978 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:09:02.283  4213  4328 I KhumasiGL: first frame 2150 ms after setup
+10-14 12:09:16.250  4811  4811 I Khumasi : UI ready in 239 ms
+10-14 12:09:16.519  4811  4866 I Khumasi : Loaded 121213 guesses in 248 ms
+10-14 12:09:18.839  4811  4864 I KhumasiGL: GL ready: setup 1907 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:09:21.142  4811  4864 I KhumasiGL: first frame 2304 ms after setup
+10-14 12:09:32.987  5153  5153 I Khumasi : UI ready in 338 ms
+10-14 12:09:33.402  5153  5204 I Khumasi : Loaded 121213 guesses in 403 ms
+10-14 12:09:35.211  5153  5201 I KhumasiGL: GL ready: setup 1860 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:09:37.325  5153  5201 I KhumasiGL: first frame 2114 ms after setup
+10-14 12:09:46.992  5374  5374 I Khumasi : UI ready in 277 ms
+10-14 12:09:47.399  5374  5432 I Khumasi : Loaded 121213 guesses in 409 ms
+10-14 12:09:48.488  5374  5424 I KhumasiGL: GL ready: setup 1316 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:09:50.785  5374  5424 I KhumasiGL: first frame 2298 ms after setup
+10-14 12:09:52.098  5374  5374 I KhumasiDemo: submitted
+10-14 12:09:58.560  5612  5612 I Khumasi : UI ready in 427 ms
+10-14 12:09:59.158  5612  5682 I Khumasi : Loaded 121213 guesses in 585 ms
+10-14 12:10:01.155  5612  5680 I KhumasiGL: GL ready: setup 2224 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:10:03.336  5612  5680 I KhumasiGL: first frame 2184 ms after setup
+10-14 12:10:20.297  5960  5960 I Khumasi : UI ready in 245 ms
+10-14 12:10:20.887  5960  6010 I Khumasi : Loaded 121213 guesses in 592 ms
+10-14 12:10:22.032  5960  6009 I KhumasiGL: GL ready: setup 1421 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:10:24.376  5960  6009 I KhumasiGL: first frame 2344 ms after setup
+10-14 12:10:35.775  6196  6196 I Khumasi : UI ready in 210 ms
+10-14 12:10:36.082  6196  6242 I Khumasi : Loaded 121213 guesses in 310 ms
+10-14 12:10:37.446  6196  6238 I KhumasiGL: GL ready: setup 1448 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:10:39.661  6196  6238 I KhumasiGL: first frame 2213 ms after setup
+10-14 12:10:48.805  6309  6309 I Khumasi : UI ready in 189 ms
+10-14 12:10:48.963  6309  6356 I Khumasi : Loaded 121213 guesses in 169 ms
+10-14 12:10:50.527  6309  6352 I KhumasiGL: GL ready: setup 1422 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:10:52.096  6309  6352 I KhumasiGL: first frame 1569 ms after setup
+10-14 12:11:05.393  6570  6570 I Khumasi : UI ready in 219 ms
+10-14 12:11:05.900  6570  6656 I Khumasi : Loaded 121213 guesses in 506 ms
+10-14 12:11:06.438  6570  6652 I KhumasiGL: GL ready: setup 791 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:11:07.935  6570  6652 I KhumasiGL: first frame 1499 ms after setup
+10-14 12:11:16.229  6929  6929 I Khumasi : UI ready in 152 ms
+10-14 12:11:16.477  6929  6978 I Khumasi : Loaded 121213 guesses in 244 ms
+10-14 12:11:17.254  6929  6973 I KhumasiGL: GL ready: setup 835 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:11:19.572  6929  6973 I KhumasiGL: first frame 2319 ms after setup
+10-14 12:11:28.024  7027  7027 I Khumasi : UI ready in 147 ms
+10-14 12:11:28.410  7027  7081 I Khumasi : Loaded 121213 guesses in 369 ms
+10-14 12:11:28.938  7027  7077 I KhumasiGL: GL ready: setup 611 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:11:31.072  7027  7077 I KhumasiGL: first frame 2255 ms after setup
+10-14 12:11:38.167  7126  7126 I Khumasi : UI ready in 167 ms
+10-14 12:11:38.301  7126  7179 I Khumasi : Loaded 121213 guesses in 131 ms
+10-14 12:11:38.909  7126  7174 I KhumasiGL: GL ready: setup 549 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:11:41.486  7126  7174 I KhumasiGL: first frame 2579 ms after setup
+10-14 12:11:53.136  7231  7231 I Khumasi : UI ready in 154 ms
+10-14 12:11:53.355  7231  7285 I Khumasi : Loaded 121213 guesses in 220 ms
+10-14 12:11:53.944  7231  7281 I KhumasiGL: GL ready: setup 645 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:11:56.322  7231  7281 I KhumasiGL: first frame 2379 ms after setup
+10-14 12:12:08.727  7326  7326 I Khumasi : UI ready in 155 ms
+10-14 12:12:08.977  7326  7380 I Khumasi : Loaded 121213 guesses in 251 ms
+10-14 12:12:09.404  7326  7378 I KhumasiGL: GL ready: setup 483 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:12:11.784  7326  7378 I KhumasiGL: first frame 2381 ms after setup
+10-14 12:12:25.197  7423  7423 I Khumasi : UI ready in 176 ms
+10-14 12:12:25.367  7423  7487 I Khumasi : Loaded 121213 guesses in 170 ms
+10-14 12:12:26.563  7423  7486 I KhumasiGL: GL ready: setup 1219 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:12:28.845  7423  7486 I KhumasiGL: first frame 2283 ms after setup
+10-14 12:12:40.602  7530  7530 I Khumasi : UI ready in 145 ms
+10-14 12:12:40.879  7530  7584 I Khumasi : Loaded 121213 guesses in 273 ms
+10-14 12:12:41.255  7530  7580 I KhumasiGL: GL ready: setup 500 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:12:43.311  7530  7580 I KhumasiGL: first frame 2056 ms after setup
+10-14 12:12:55.112  7640  7640 I Khumasi : UI ready in 252 ms
+10-14 12:12:55.258  7640  7698 I Khumasi : Loaded 121213 guesses in 146 ms
+10-14 12:12:55.880  7640  7694 I KhumasiGL: GL ready: setup 616 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:12:58.034  7640  7694 I KhumasiGL: first frame 2154 ms after setup
+10-14 12:13:09.445  7773  7773 I Khumasi : UI ready in 298 ms
+10-14 12:13:09.639  7773  7823 I Khumasi : Loaded 121213 guesses in 195 ms
+10-14 12:13:10.203  7773  7820 I KhumasiGL: GL ready: setup 557 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:13:13.019  7773  7820 I KhumasiGL: first frame 2818 ms after setup
+10-14 12:13:24.197  7877  7877 I Khumasi : UI ready in 175 ms
+10-14 12:13:24.367  7877  7936 I Khumasi : Loaded 121213 guesses in 172 ms
+10-14 12:13:24.784  7877  7934 I KhumasiGL: GL ready: setup 475 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:13:27.160  7877  7934 I KhumasiGL: first frame 2376 ms after setup
+10-14 12:13:29.235  7877  7877 I KhumasiDemo: submitted
+10-14 12:13:38.188  8042  8042 I Khumasi : UI ready in 162 ms
+10-14 12:13:38.341  8042  8096 I Khumasi : Loaded 121213 guesses in 155 ms
+10-14 12:13:39.111  8042  8094 I KhumasiGL: GL ready: setup 793 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:13:41.161  8042  8094 I KhumasiGL: first frame 2051 ms after setup
+10-14 12:13:49.665  8144  8144 I Khumasi : UI ready in 145 ms
+10-14 12:13:49.967  8144  8197 I Khumasi : Loaded 121213 guesses in 303 ms
+10-14 12:13:50.388  8144  8194 I KhumasiGL: GL ready: setup 569 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:13:52.969  8144  8194 I KhumasiGL: first frame 2581 ms after setup
+10-14 12:14:03.795  8241  8241 I Khumasi : UI ready in 150 ms
+10-14 12:14:03.995  8241  8294 I Khumasi : Loaded 121213 guesses in 201 ms
+10-14 12:14:04.747  8241  8291 I KhumasiGL: GL ready: setup 793 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:14:07.097  8241  8291 I KhumasiGL: first frame 2352 ms after setup
+10-14 12:14:15.151  8334  8334 I Khumasi : UI ready in 139 ms
+10-14 12:14:15.509  8334  8385 I Khumasi : Loaded 121213 guesses in 359 ms
+10-14 12:14:16.486  8334  8379 I KhumasiGL: GL ready: setup 994 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:14:18.820  8334  8379 I KhumasiGL: first frame 2515 ms after setup
+10-14 12:14:29.619  8428  8428 I Khumasi : UI ready in 159 ms
+10-14 12:14:29.620  8428  8428 I KhumasiDemo: code KH-9NB4-RB4E-2UMZJ
+10-14 12:14:29.898  8428  8481 I Khumasi : Loaded 121213 guesses in 273 ms
+10-14 12:14:30.545  8428  8480 I KhumasiGL: GL ready: setup 757 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:14:32.874  8428  8480 I KhumasiGL: first frame 2329 ms after setup
+10-14 12:14:42.287  8529  8529 I Khumasi : UI ready in 116 ms
+10-14 12:14:42.607  8529  8580 I Khumasi : Loaded 121213 guesses in 321 ms
+10-14 12:14:43.335  8529  8576 I KhumasiGL: GL ready: setup 916 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:14:46.050  8529  8576 I KhumasiGL: first frame 2715 ms after setup
+10-14 12:14:56.307  8625  8625 I Khumasi : UI ready in 141 ms
+10-14 12:14:56.517  8625  8676 I Khumasi : Loaded 121213 guesses in 204 ms
+10-14 12:14:57.217  8625  8672 I KhumasiGL: GL ready: setup 695 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:14:59.190  8625  8672 I KhumasiGL: first frame 1974 ms after setup
+10-14 12:15:12.253  8775  8775 I Khumasi : UI ready in 146 ms
+10-14 12:15:12.521  8775  8830 I Khumasi : Loaded 121213 guesses in 263 ms
+10-14 12:15:13.286  8775  8826 I KhumasiGL: GL ready: setup 882 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:15:15.592  8775  8826 I KhumasiGL: first frame 2306 ms after setup
+10-14 12:15:23.528  8868  8868 I Khumasi : UI ready in 211 ms
+10-14 12:15:23.826  8868  8926 I Khumasi : Loaded 121213 guesses in 299 ms
+10-14 12:15:24.161  8868  8923 I KhumasiGL: GL ready: setup 475 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:15:26.438  8868  8923 I KhumasiGL: first frame 2278 ms after setup
+10-14 12:15:37.246  8964  8964 I Khumasi : UI ready in 181 ms
+10-14 12:15:37.347  8964  9013 I Khumasi : Loaded 121213 guesses in 102 ms
+10-14 12:15:38.226  8964  9009 I KhumasiGL: GL ready: setup 813 ms, Android Emulator OpenGL ES Translator (Google SwiftShader), OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+10-14 12:15:40.934  8964  9009 I KhumasiGL: first frame 2709 ms after setup
+10-14 12:15:50.166  9058  9058 I Khumasi : UI ready in 198 ms
