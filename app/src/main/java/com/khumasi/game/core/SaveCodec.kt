@@ -80,6 +80,7 @@ object SaveCodec {
             "shells" to "${p.shells};${p.shellsEarned}",
             "badges" to p.badges.sorted().joinToString(","),
             "rush" to "${p.bestRush};${p.rushPlayed}",
+            "scr" to "${p.scrambleStage};${p.scrambleStars}",
         )
     )
 
@@ -104,6 +105,8 @@ object SaveCodec {
                 badges = m["badges"].orEmpty().split(',').filter { it.isNotBlank() }.toSet(),
                 bestRush = pair(m["rush"]).first,
                 rushPlayed = pair(m["rush"]).second,
+                scrambleStage = pair(m["scr"]).first.coerceAtLeast(1),
+                scrambleStars = pair(m["scr"]).second,
             )
         }.getOrNull()
     }

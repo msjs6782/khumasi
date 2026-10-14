@@ -58,7 +58,14 @@ data class Progress(
     /** Most words solved in one race against the clock. */
     val bestRush: Int = 0,
     val rushPlayed: Int = 0,
+    /** «الكلمة المبعثرة»: the next stage to play, and all stars collected. */
+    val scrambleStage: Int = 1,
+    val scrambleStars: Int = 0,
 ) {
+    val scrambleSolved: Int get() = scrambleStage - 1
+
+    fun recordScramble(stars: Int): Progress = copy(scrambleStage = scrambleStage + 1, scrambleStars = scrambleStars + stars)
+
     fun earn(n: Int): Progress = if (n <= 0) this else copy(shells = shells + n, shellsEarned = shellsEarned + n)
 
     /** Null when there are not enough shells. */

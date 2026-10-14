@@ -110,11 +110,18 @@ shot 41_won_badges 9 --es demo_answer "مدرسة" --es demo_guesses "مدرسة
 shot 42_rush 8 --es demo_answer "مدرسة" --ez demo_rush true
 shot 43_rush_end 10 --es demo_answer "مدرسة" --ez demo_rush_end true
 
+# «الكلمة المبعثرة»: first stage, a 6-letter stage with a hint, a solved 7-letter stage.
+shot 44_games 7 --es demo_answer "مدرسة" --ez demo_modes true --ei demo_scramble_stage 12
+shot 45_scramble 8 --es demo_answer "مدرسة" --ez demo_scramble true --ei demo_scramble_stage 1 --ei demo_shells 10
+shot 46_scramble_hint 9 --es demo_answer "مدرسة" --ez demo_scramble true --ei demo_scramble_stage 40 --ei demo_shells 10 --ez demo_scramble_hint true
+shot 47_scramble_solved 10 --es demo_answer "مدرسة" --ez demo_scramble true --ei demo_scramble_stage 60 --ez demo_scramble_solve true
+# The same with a short phone.
 # A short 16:9 phone (360x640 dp): the board and keyboard must fit without clipping.
 adb shell wm size 1080x1920
 adb shell wm density 480
 sleep 2
 shot 17_small_midgame 9 --es demo_answer "مدرسة" --es demo_guesses "سيارة,مكتبة,درجات,حديقة,جزيرة,مدينة" --es demo_input "مد" --ei demo_wins 4
+shot 48_small_scramble 9 --es demo_answer "مدرسة" --ez demo_scramble true --ei demo_scramble_stage 62
 shot 18_small_result 9 --es demo_answer "مدرسة" --es demo_guesses "مكتبة,مدرسة" --ez demo_result true --ei demo_wins 12
 adb shell wm size reset
 adb shell wm density reset

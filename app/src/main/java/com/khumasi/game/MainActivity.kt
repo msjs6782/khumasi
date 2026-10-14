@@ -34,6 +34,9 @@ import com.khumasi.game.core.Badge
 import com.khumasi.game.core.Daily
 import com.khumasi.game.core.PowerUps
 import com.khumasi.game.core.Rush
+import com.khumasi.game.core.ScrambleLevels
+import com.khumasi.game.core.ScrambleList
+import com.khumasi.game.core.ScramblePuzzle
 import com.khumasi.game.core.Shells
 import com.khumasi.game.core.FriendCode
 import com.khumasi.game.core.LetterState
@@ -62,6 +65,7 @@ import com.khumasi.game.ui.Fonts
 import com.khumasi.game.ui.IconView
 import com.khumasi.game.ui.KeyboardView
 import com.khumasi.game.ui.Panels
+import com.khumasi.game.ui.ScrambleScreen
 import com.khumasi.game.ui.SheetHost
 import com.khumasi.game.ui.UiColors
 import com.khumasi.game.ui.dp
@@ -113,6 +117,9 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
     private var rushEnded = false
     private var rushLast = 0L
     private var lastRushSummary: (() -> Unit)? = null
+    private var scramble: ScrambleScreen? = null
+    private var scramblePuzzles: List<ScramblePuzzle>? = null
+    private var insetSide = 0
     private var inputLockedUntil = 0L
     private var resumedAt = 0L
     private var lastRegion = floatArrayOf(0f, 0f, 0f, 0f)
@@ -179,7 +186,11 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (sheets.isShowing) sheets.close() else finish()
+                when {
+                    sheets.isShowing -> sheets.close()
+                    scramble != null -> closeScramble()
+                    else -> finish()
+                }
             }
         })
 
@@ -334,6 +345,8 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
             insetTop = max(cutout.top, bars.top)
             insetBottom = maxOf(cutout.bottom, bars.bottom, gestures.bottom)
             val side = max(cutout.left, cutout.right)
+            insetSide = side
+            scramble?.setInsets(insetTop, insetBottom, side)
             header.setPadding(dpi(8f) + side, insetTop + dpi(4f), dpi(8f) + side, dpi(6f))
             (toast.layoutParams as FrameLayout.LayoutParams).topMargin = insetTop + dpi(62f)
             sheets.bottomInset = insetBottom
@@ -681,8 +694,10 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
             bestRush = progress.bestRush,
             shells = progress.shells,
             badges = progress.badges.size,
+            scrambleStage = progress.scrambleStage,
+            scrambleStars = progress.scrambleStars,
         )
-        sheets.show("أنماط اللعب", panels.modes(info,
+        sheets.show("الألعاب والأنماط", panels.modes(info,
             onDaily = { if (state.mode == GameState.MODE_DAILY) { sheets.close(); if (state.isOver) handler.postDelayed({ showResult(false) }, 300) } else switchTo(GameState.MODE_DAILY) },
             onClassic = { switchTo(GameState.MODE_CLASSIC) },
             onFriendCreate = { showFriendCreate() },
@@ -690,6 +705,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
             onFriendResume = { switchTo(GameState.MODE_FRIEND) },
             onRush = { if (state.mode == GameState.MODE_RUSH && !rushEnded) sheets.close() else startRush() },
             onBadges = { showBadges() },
+            onScramble = { openScramble() },
         ), maxHeightFraction = 0.85f)
     }
 
@@ -868,6 +884,82 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
 
     private fun showBadges() = sheets.show("الأوسمة", panels.badges(progress), maxHeightFraction = 0.85f) {
         if (state.isOver) surface?.send { setWorldView(false) }
+        updateRoundUi()
+    }
+
+    // ------------------------------------------------------------------ «الكلمة المبعثرة»
+
+    private fun loadScramble(): List<ScramblePuzzle>? = scramblePuzzles ?: try {
+        assets.open("dict/scramble.tsv").bufferedReader(Charsets.UTF_8).useLines { ScrambleList.parse(it) }.also { scramblePuzzles = it }
+    } catch (t: Throwable) {
+        Log.e(TAG, "Scramble list failed", t); null
+    }
+
+    private fun openScramble() {
+        val puzzles = loadScramble()?.takeIf { it.isNotEmpty() } ?: run { showToast("تعذّر تحميل الكلمات"); return }
+        sheets.close()
+        if (scramble == null) {
+            val screen = ScrambleScreen(this, fonts, object : ScrambleScreen.Callbacks {
+                override fun onClose() = closeScramble()
+                override fun onSolved(stars: Int): Int {
+                    val shells = if (stars > 0) ScrambleLevels.shells(stars) else 0
+                    progress = progress.recordScramble(stars).earn(shells)
+                    val badges = Achievements.newlyEarned(progress, null)
+                    progress = Achievements.grant(progress, badges)
+                    store.saveProgress(progress)
+                    for (b in badges) scramble?.note("🏅 وسام جديد: ${b.emoji} ${b.title} (+${com.khumasi.game.ui.ar(b.shells)} 🐚)")
+                    if (badges.isNotEmpty()) handler.postDelayed({ sfx.play(SoundFx.Fx.LEVEL_UP, 0.55f) }, 600)
+                    if (store.haptics) scramble?.performHapticFeedback(
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.LONG_PRESS)
+                    surface?.send { celebrate(SystemClock.uptimeMillis()) }
+                    return shells
+                }
+                override fun onNext() = showScrambleStage()
+                override fun pay(cost: Int): Boolean {
+                    val paid = progress.spend(cost)
+                    if (paid == null) { showToast("تحتاج ${com.khumasi.game.ui.ar(cost)} أصداف — اكسبها بالفوز"); return false }
+                    progress = paid
+                    store.saveProgress(progress)
+                    return true
+                }
+                override fun shells(): Int = progress.shells
+                override fun sound(kind: ScrambleScreen.Sound) {
+                    when (kind) {
+                    ScrambleScreen.Sound.TAP -> sfx.play(SoundFx.Fx.TAP, 0.5f)
+                    ScrambleScreen.Sound.BACK -> sfx.play(SoundFx.Fx.DELETE, 0.45f)
+                    ScrambleScreen.Sound.WRONG -> sfx.play(SoundFx.Fx.INVALID, 0.5f)
+                    ScrambleScreen.Sound.HINT -> sfx.play(SoundFx.Fx.PRESENT, 0.55f)
+                    ScrambleScreen.Sound.SOLVED -> sfx.play(SoundFx.Fx.WIN, 0.65f)
+                    }
+                }
+            })
+            screen.setInsets(insetTop, insetBottom, insetSide)
+            root.addView(screen, root.indexOfChild(sheets), FrameLayout.LayoutParams(MATCH, MATCH))
+            scramble = screen
+            if (!reduceMotion) { screen.alpha = 0f; screen.animate().alpha(1f).setDuration(220).start() }
+        }
+        header.visibility = View.INVISIBLE
+        keyboardPanel.visibility = View.INVISIBLE
+        surface?.send { setWorldView(true) }
+        showScrambleStage(puzzles)
+    }
+
+    private fun showScrambleStage(puzzles: List<ScramblePuzzle>? = loadScramble()) {
+        val list = puzzles ?: return
+        val stage = progress.scrambleStage
+        scramble?.show(stage, ScrambleLevels.puzzleFor(stage, list))
+    }
+
+    private fun closeScramble() {
+        val screen = scramble ?: return
+        scramble = null
+        root.removeView(screen)
+        header.visibility = View.VISIBLE
+        keyboardPanel.visibility = View.VISIBLE
+        surface?.send { setWorldView(false) }
+        applyLooks() // the island may have grown; rewards and themes follow the new level
+        val level = progress.islandLevel
+        surface?.send { setIslandLevel(level) }
         updateRoundUi()
     }
 
@@ -1221,6 +1313,7 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         i.getStringExtra("demo_tiles")?.let { store.tileTheme = it }
         if (i.hasExtra("demo_hard")) store.hardMode = i.getBooleanExtra("demo_hard", false)
         if (i.hasExtra("demo_timer")) store.showTimer = i.getBooleanExtra("demo_timer", false)
+        if (i.hasExtra("demo_scramble_stage")) progress = progress.copy(scrambleStage = i.getIntExtra("demo_scramble_stage", 1))
         if (i.hasExtra("demo_shells")) progress = progress.copy(shells = i.getIntExtra("demo_shells", 0))
         val haveBadges = i.getIntExtra("demo_badge_count", 0)
         if (haveBadges > 0) progress = progress.copy(badges = Achievements.ALL.take(haveBadges).map { it.id }.toSet())
@@ -1267,6 +1360,11 @@ class MainActivity : ComponentActivity(), KeyboardView.Listener, GameRenderer.Li
         if (i.getBooleanExtra("demo_scroll_ai", false)) handler.postDelayed({
             (sheets.findViewWithTag<View>("sheet_scroll") as? android.widget.ScrollView)?.fullScroll(View.FOCUS_DOWN)
         }, 1500)
+        if (i.getBooleanExtra("demo_scramble", false)) handler.postDelayed({
+            openScramble()
+            if (i.getBooleanExtra("demo_scramble_hint", false)) handler.postDelayed({ scramble?.demoHint() }, 700)
+            if (i.getBooleanExtra("demo_scramble_solve", false)) handler.postDelayed({ scramble?.demoSolve() }, 700)
+        }, 800)
         if (i.getBooleanExtra("demo_help", false)) handler.postDelayed({ showHelp() }, 800)
         if (i.getBooleanExtra("demo_reveal", false)) handler.postDelayed({ buyReveal(); buyEliminate() }, 800)
         if (i.getBooleanExtra("demo_badges", false)) handler.postDelayed({ showBadges() }, 800)

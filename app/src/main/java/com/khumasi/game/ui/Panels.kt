@@ -187,6 +187,9 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
             addSpaced(text("تحدي اليوم", 17f, bold = true), 18f)
             addSpaced(numbers(progress.daily.copy(currentStreak = progress.dailyStreak(todayDaily))), 6f)
         }
+        if (progress.scrambleSolved > 0) {
+            addSpaced(text("🔀 الكلمة المبعثرة: ${ar(progress.scrambleSolved)} مرحلة · ⭐ ${ar(progress.scrambleStars)}", 14f, color = UiColors.MUTED), 10f)
+        }
         if (progress.rushPlayed > 0) {
             addSpaced(text("⏱️ سباق الوقت: أفضل نتيجة ${ar(progress.bestRush)} كلمات في ${ar(progress.rushPlayed)} سباقًا", 14f, color = UiColors.MUTED), 10f)
         }
@@ -541,6 +544,8 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
         val bestRush: Int = 0,
         val shells: Int = 0,
         val badges: Int = 0,
+        val scrambleStage: Int = 1,
+        val scrambleStars: Int = 0,
     )
 
     private fun card(title: String, subtitle: String, selected: Boolean): LinearLayout = column().apply {
@@ -560,6 +565,7 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
         onFriendResume: () -> Unit,
         onRush: () -> Unit = {},
         onBadges: () -> Unit = {},
+        onScramble: () -> Unit = {},
     ): View = column().apply {
         val top = row()
         top.addView(text("🐚 ${ar(info.shells)} صدفة", 15f, bold = true, color = opaque(Palette.PRESENT)), LinearLayout.LayoutParams(0, wrap, 1f))
@@ -579,6 +585,15 @@ class Panels(private val ctx: Context, private val fonts: Fonts) {
         val classic = card("🎲 اللعب الحر", "كلمات عشوائية بلا حدود، وتنمو جزيرتك مع كل فوز.", info.current == GameState.MODE_CLASSIC)
         if (info.current != GameState.MODE_CLASSIC) classic.addSpaced(button("العب", primary = false, onClick = onClassic), 10f)
         addSpaced(classic, 12f)
+
+        addSpaced(text("ألعاب أخرى", 14f, bold = true, color = UiColors.ACCENT), 18f)
+        val scramble = card("🔀 الكلمة المبعثرة",
+            "رتّب الحروف المبعثرة لتكوّن الكلمة. تبدأ بثلاثة أحرف وتطول مع كل مرحلة." +
+                if (info.scrambleStage > 1) "\nوصلت إلى المرحلة ${ar(info.scrambleStage)} · ⭐ ${ar(info.scrambleStars)}" else "",
+            false)
+        scramble.addSpaced(button(if (info.scrambleStage > 1) "تابع من المرحلة ${ar(info.scrambleStage)}" else "العب", primary = true, onClick = onScramble), 10f)
+        addSpaced(scramble, 8f)
+        addSpaced(text("أنماط خماسي", 14f, bold = true, color = UiColors.ACCENT), 18f)
 
         val rush = card("⏱️ سباق الوقت" + if (info.bestRush > 0) "   🏁 ${ar(info.bestRush)}" else "",
             "ثلاث دقائق لتحل أكبر عدد من الكلمات، وكل كلمة تحلها تضيف ٢٠ ثانية.", info.current == GameState.MODE_RUSH)
